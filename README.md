@@ -263,4 +263,4 @@ For full step-by-step instructions on production configuration, custom domains, 
 
 ## 📄 License
 
-MIT © [Shekinah](https://github.com/shekinahman)
+MIT © [Shekinah](LICENSE)
