@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: nudge-api
+    env: node
+    plan: starter # Starter plan ($7/mo) ensures 24/7 uptime without cold starts for cron jobs
+    region: oregon
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @nudge/api run build
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:support@nudge.app
+      - key: REDIS_URL
+        sync: false
