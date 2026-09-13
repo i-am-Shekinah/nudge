@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// User
+// ─────────────────────────────────────────────
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  name             String
+  googleId         String         @unique
+  avatarUrl        String?        // Google profile photo URL
+  accessToken      String         // AES-256-GCM encrypted
+  refreshToken     String         // AES-256-GCM encrypted
+  tokenExpiresAt   DateTime
+  notificationTime String         @default("07:00") // "HH:MM" in user's timezone
+  timezone         String         @default("UTC")   // IANA timezone string
+  pushSubscription Json?          // Web Push API subscription object
+  reminderPreset   ReminderPreset @default(DEFAULT)
+  customReminders  Int[]          @default([4320, 1440, 60, 30, 5]) // minutes before event
+  gmailConnected   Boolean        @default(false)
+  lastBackfillAt   DateTime?
+  nextScanAt       DateTime?      // Next scheduled midnight scan (indexed for O(due_users) queries)
+  nextNotifyAt     DateTime?      // Next scheduled morning notification (indexed)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  scanLogs       ScanLog[]
+  detectedEvents DetectedEvent[]
+
+  @@index([nextScanAt])   // Enables efficient "who is due for a scan right now?" queries
+  @@index([nextNotifyAt]) // Same for morning notification scheduling
+}
+
+// ─────────────────────────────────────────────
+// ScanLog — one record per nightly scan run
+// ─────────────────────────────────────────────
+
+model ScanLog {
+  id             String     @id @default(uuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt      DateTime   @default(now())
+  completedAt    DateTime?
+  status         ScanStatus @default(RUNNING)
+  emailsScanned  Int        @default(0)
+  eventsDetected Int        @default(0)
+  windowStart    DateTime   // Oldest email timestamp considered in this scan
+  windowEnd      DateTime   // Newest email timestamp considered in this scan
+  errorMessage   String?
+
+  @@index([userId, startedAt])
+}
+
+// ─────────────────────────────────────────────
+// DetectedEvent — one record per detected email event
+// ─────────────────────────────────────────────
+
+model DetectedEvent {
+  id                    String      @id @default(uuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Email provenance (never store raw body)
+  gmailMessageId        String      // Gmail message ID — used as idempotency key
+  emailSubject          String      // Original email subject line
+  emailSender           String      // Sender display name + address
+  gmailLink             String      // https://mail.google.com/mail/u/0/#inbox/{messageId}
+
+  // AI-extracted event data
+  title                 String      // Event title (e.g. "Cardtonic Assessment")
+  summary               String      // AI-generated human-readable excerpt
+  eventType             String      // "assessment" | "interview" | "appointment" | etc.
+  startAt               DateTime?   // Event start time (UTC)
+  endAt                 DateTime?   // Event end time (UTC), nullable
+  deadline              DateTime?   // Deadline/close date (UTC), nullable
+  timezone              String      // IANA timezone extracted from email
+  importance            Importance  @default(MEDIUM)
+  confidence            Float       // AI confidence score 0.0–1.0 (stored, not shown to user)
+
+  // State machine
+  status                EventStatus @default(PENDING)
+  googleCalendarEventId String?     // Set when calendar event is created
+  calendarError         String?     // Last calendar API error message
+  calendarRetryCount    Int         @default(0)
+
+  // Lifecycle
+  autoDeleteAt          DateTime?   // event date + 7 days — swept by AutoDeleteJob daily
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  // Idempotency: one record per (user, gmail message)
+  @@unique([userId, gmailMessageId])
+  @@index([userId, status])
+  @@index([autoDeleteAt])
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum ReminderPreset {
+  DEFAULT // [4320, 1440, 60, 30, 5] minutes (3d, 1d, 1h, 30m, 5m)
+  CUSTOM  // User-defined reminder intervals
+}
+
+enum ScanStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum EventStatus {
+  PENDING   // Awaiting user decision
+  APPROVED  // User approved — calendar job enqueued
+  ACTIVE    // Calendar event created — event in the future
+  COMPLETED // Event date has passed (approved path)
+  IGNORED   // User dismissed — visible in dismissed view
+  EXPIRED   // Ignored event date has passed
+  ERROR     // Calendar creation failed after 3 retries
+}
+
+enum Importance {
+  LOW
+  MEDIUM
+  HIGH
+}
