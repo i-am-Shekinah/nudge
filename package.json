@@ -1,0 +1,29 @@
+{
+  "name": "nudge",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @nudge/api start:dev",
+    "dev:web": "pnpm --filter @nudge/web dev",
+    "build:api": "pnpm --filter @nudge/api build",
+    "build:web": "pnpm --filter @nudge/web build",
+    "lint": "pnpm -r run lint",
+    "prisma:migrate": "pnpm --filter @nudge/api prisma migrate dev",
+    "prisma:studio": "pnpm --filter @nudge/api prisma studio",
+    "prisma:generate": "pnpm --filter @nudge/api prisma generate"
+  },
+  "pnpm": {
+    "approvedBuilds": [
+      "unrs-resolver",
+      "sharp",
+      "@img/sharp-win32-x64",
+      "@img/sharp-wasm32",
+      "@next/swc-win32-x64-msvc"
+    ]
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=12.0.0"
+  }
+}
+
