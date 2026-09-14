@@ -85,11 +85,11 @@ nudge/
 │       └── public/            # Static assets & sw.js service worker
 ├── docs/
 │   ├── DEVELOPER_GUIDE.md     # Comprehensive pnpm setup & dev cheat sheet
-│   └── DEPLOYMENT_GUIDE.md    # Production deployment for Render & Vercel
+│   └── DEPLOYMENT_GUIDE.md    # Production deployment guide (Oracle Cloud VM + Ubuntu)
 ├── packages/
 │   └── shared/                # Shared TypeScript types, enums & interfaces
 ├── pnpm-workspace.yaml        # Workspace configuration
-└── render.yaml                # Render Blueprint (NestJS Web Service + Redis)
+└── render.yaml                # Render Blueprint (Legacy/interim; pending Phase 2 decommission)
 ```
 
 ---
@@ -236,13 +236,15 @@ pnpm build:web
 
 ## 🚢 Deployment
 
-Nudge is designed for zero-hassle cloud deployment:
+Nudge's production infrastructure is designed for 24/7 continuous operation:
 
-- **Backend API**: Ready for **Render** via the included [`render.yaml`](render.yaml) Blueprint (Docker/Node runtime + Redis service).
-- **Frontend**: Optimized for **Vercel** with full static route optimization and zero-config deployment.
-- **Database**: Serverless PostgreSQL via **Neon**.
+- **Backend API & Background Schedulers**: Deployed on a self-managed **Ubuntu Linux VM on Oracle Cloud Infrastructure (OCI) Always Free tier** (`systemd` + Nginx reverse proxy). This ensures 24/7 uptime without cold starts or sleeping instances, guaranteeing reliable 60-second midnight email scans and morning notification sweeps.
+- **Database**: Serverless PostgreSQL via **Neon** (pooled SSL connection).
+- **Queue & Cache**: Serverless Redis with TLS via **Upstash** (BullMQ job processing).
+- **Frontend**: Configured for **Vercel** (`apps/web/vercel.json`), with self-hosting on the OCI VM as an open architectural option.
+- **Legacy Blueprint**: `render.yaml` remains in the repository as an interim configuration file and will be decommissioned in Phase 2.
 
-For full step-by-step instructions on production configuration, custom domains, and database migrations, refer to the **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)**.
+For the step-by-step server provisioning runbook, systemd service units, Nginx reverse proxy configuration, and production operations checklist, refer to the **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)**.
 
 ---
 
@@ -263,4 +265,4 @@ For full step-by-step instructions on production configuration, custom domains, 
 
 ## 📄 License
 
-MIT © [Shekinah](LICENSE)
+[MIT](LICENSE) © [Shekinah](https://github.com/i-am-Shekinah)
