@@ -51,8 +51,12 @@ export class NightlyScanOrchestrator {
           data: { nextScanAt: nextMidnightUtc },
         });
 
-        // 24-hour lookback window (from yesterday midnight to today midnight)
-        const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        // Resume from the stored cursor so a late catch-up can never gap;
+        // 1-minute overlap is deduped by the (userId, gmailMessageId) upsert.
+        const cursor = user.lastScannedAt ?? user.lastBackfillAt;
+        const windowStart = cursor
+          ? new Date(cursor.getTime() - 60 * 1000)
+          : new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const windowEnd = now;
 
         const scanLog = await this.prisma.scanLog.create({

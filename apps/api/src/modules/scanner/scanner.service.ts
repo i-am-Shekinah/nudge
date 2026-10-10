@@ -150,6 +150,9 @@ export class ScannerService {
           lastBackfillAt: new Date(),
           // Arm the nightly scan; without this a user is never due (nextScanAt stays null)
           nextScanAt: getNextMidnight(userTimezone, new Date()),
+          // Advance the scan cursor only on success; failed scans leave the
+          // gap for the next run to cover (event upserts dedupe any overlap)
+          lastScannedAt: windowEnd,
         },
       });
 

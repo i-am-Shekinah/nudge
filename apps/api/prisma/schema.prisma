@@ -29,6 +29,7 @@ model User {
   customReminders  Int[]          @default([4320, 1440, 60, 30, 5]) // minutes before event
   gmailConnected   Boolean        @default(false)
   lastBackfillAt   DateTime?
+  lastScannedAt    DateTime?      // Cursor: end of the last successful scan window; next scan resumes from here
   nextScanAt       DateTime?      // Next scheduled midnight scan (indexed for O(due_users) queries)
   nextNotifyAt     DateTime?      // Next scheduled morning notification (indexed)
   createdAt        DateTime       @default(now())

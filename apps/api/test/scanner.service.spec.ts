@@ -49,15 +49,16 @@ describe('ScannerService', () => {
     );
   });
 
-  it('arms the nightly scan (nextScanAt) when the backfill pipeline completes', async () => {
+  it('arms the nightly scan (nextScanAt) and advances the cursor when the pipeline completes', async () => {
     gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
     aiMock.classifyEmail.mockResolvedValue({ title: 'Technical assessment' });
 
+    const windowEnd = new Date();
     await service.runScanPipeline(
       userId,
       'scan-1',
       new Date(Date.now() - 7 * 24 * 3600 * 1000),
-      new Date(),
+      windowEnd,
       'UTC',
     );
 
@@ -68,6 +69,7 @@ describe('ScannerService', () => {
     expect(userUpdate.data.gmailConnected).toBe(true);
     expect(userUpdate.data.nextScanAt).toBeInstanceOf(Date);
     expect(userUpdate.data.nextScanAt.getTime()).toBeGreaterThan(Date.now());
+    expect(userUpdate.data.lastScannedAt).toEqual(windowEnd);
   });
 
   it('does not send heuristic-blocked emails to the AI', async () => {
@@ -87,6 +89,22 @@ describe('ScannerService', () => {
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
     expect(finalUpdate.data.eventsDetected).toBe(0);
+  });
+
+  it('does not advance the cursor when the scan fails, so the next run re-covers the gap', async () => {
+    gmailMock.fetchEmails.mockRejectedValue(new Error('Gmail API unreachable'));
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
   });
 
   it('triggerBackfill skips users whose backfill already ran', async () => {
