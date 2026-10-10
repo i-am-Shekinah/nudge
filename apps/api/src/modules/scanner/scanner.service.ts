@@ -8,6 +8,7 @@ import { GmailService } from '../gmail/gmail.service.js';
 import { filterEmailHeuristically } from '../gmail/email-filter.util.js';
 import { AiService } from '../ai/ai.service.js';
 import { EventsService } from '../events/events.service.js';
+import { getNextMidnight } from '../../common/timezone.util.js';
 import { ScanStatus } from '@prisma/client';
 
 @Injectable()
@@ -147,6 +148,8 @@ export class ScannerService {
         data: {
           gmailConnected: true,
           lastBackfillAt: new Date(),
+          // Arm the nightly scan; without this a user is never due (nextScanAt stays null)
+          nextScanAt: getNextMidnight(userTimezone, new Date()),
         },
       });
 
