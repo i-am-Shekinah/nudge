@@ -11,5 +11,4 @@ export interface EmailDto {
 export interface FetchEmailsOptions {
   since: Date;
   until?: Date;
-  maxResults?: number;
 }

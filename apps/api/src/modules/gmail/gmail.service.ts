@@ -98,16 +98,27 @@ export class GmailService {
       const listRes = await gmail.users.messages.list({
         userId: 'me',
         q: query,
-        maxResults: options.maxResults || 50,
+        maxResults: 500,
       });
 
-      const messages = listRes.data.messages || [];
+      const messages = [...(listRes.data.messages ?? [])];
+      let pageToken = listRes.data.nextPageToken;
+      while (pageToken) {
+        const nextRes = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 500,
+          pageToken,
+        });
+        messages.push(...(nextRes.data.messages ?? []));
+        pageToken = nextRes.data.nextPageToken;
+      }
+
       if (messages.length === 0) {
         return [];
       }
 
-      // Fetch metadata in parallel
-      const emailPromises = messages.map(async (msg) => {
+      const fetchOne = async (msg: (typeof messages)[number]) => {
         if (!msg.id) return null;
         try {
           const detailRes = await gmail.users.messages.get({
@@ -141,10 +152,18 @@ export class GmailService {
           this.logger.warn(`Could not fetch message metadata for ${msg.id}: ${err.message}`);
           return null;
         }
-      });
+      };
 
-      const results = await Promise.all(emailPromises);
-      return results.filter((email): email is EmailDto => email !== null);
+      // Bounded concurrency: a paginated window can hold thousands of IDs
+      const METADATA_BATCH_SIZE = 50;
+      const results: EmailDto[] = [];
+      for (let i = 0; i < messages.length; i += METADATA_BATCH_SIZE) {
+        const batch = await Promise.all(
+          messages.slice(i, i + METADATA_BATCH_SIZE).map(fetchOne),
+        );
+        results.push(...batch.filter((email): email is EmailDto => email !== null));
+      }
+      return results;
     } catch (err: any) {
       this.logger.error(`Error in fetchEmails for user ${userId}: ${err.message}`);
       // Return empty array on failure or local mock
