@@ -8,7 +8,7 @@ import { GmailService } from '../gmail/gmail.service.js';
 import { filterEmailHeuristically } from '../gmail/email-filter.util.js';
 import { AiService } from '../ai/ai.service.js';
 import { EventsService } from '../events/events.service.js';
-import { getNextMidnight } from '../../common/timezone.util.js';
+import { getNextMidnight, getNextScheduledTime } from '../../common/timezone.util.js';
 import { ScanStatus } from '@prisma/client';
 
 @Injectable()
@@ -108,27 +108,35 @@ export class ScannerService {
 
       // 3. AI classification via Gemini 2.0 Flash
       for (const candidate of candidates) {
-        const classified = await this.aiService.classifyEmail(
-          candidate,
-          userTimezone,
-        );
-
-        if (classified) {
-          await this.eventsService.createDetectedEvent(
-            userId,
+        try {
+          const classified = await this.aiService.classifyEmail(
             candidate,
-            classified,
+            userTimezone,
           );
-          eventsCount++;
 
-          // Periodically update scan log progress
-          await this.prisma.scanLog.update({
-            where: { id: scanLogId },
-            data: {
-              emailsScanned: emails.length,
-              eventsDetected: eventsCount,
-            },
-          });
+          if (classified) {
+            await this.eventsService.createDetectedEvent(
+              userId,
+              candidate,
+              classified,
+            );
+            eventsCount++;
+
+            // Periodically update scan log progress
+            await this.prisma.scanLog.update({
+              where: { id: scanLogId },
+              data: {
+                emailsScanned: emails.length,
+                eventsDetected: eventsCount,
+              },
+            });
+          }
+        } catch (err: any) {
+          // One poison email (rate limit, parser crash) must not fail the
+          // whole scan: that would stall the cursor and re-crash nightly.
+          this.logger.warn(
+            `Classification failed for email ${candidate.id}, skipping: ${err.message}`,
+          );
         }
       }
 
@@ -143,6 +151,11 @@ export class ScannerService {
         },
       });
 
+      const scanUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { notificationTime: true },
+      });
+
       await this.prisma.user.update({
         where: { id: userId },
         data: {
@@ -150,6 +163,13 @@ export class ScannerService {
           lastBackfillAt: new Date(),
           // Arm the nightly scan; without this a user is never due (nextScanAt stays null)
           nextScanAt: getNextMidnight(userTimezone, new Date()),
+          // Same arming for the morning digest (nextNotifyAt is otherwise only
+          // set when the user edits settings)
+          nextNotifyAt: getNextScheduledTime(
+            scanUser?.notificationTime ?? '07:00',
+            userTimezone,
+            new Date(),
+          ),
           // Advance the scan cursor only on success; failed scans leave the
           // gap for the next run to cover (event upserts dedupe any overlap)
           lastScannedAt: windowEnd,

@@ -28,7 +28,7 @@ describe('ScannerService', () => {
   beforeEach(() => {
     prismaMock = {
       user: {
-        findUnique: vi.fn(),
+        findUnique: vi.fn().mockResolvedValue({ notificationTime: '07:00' }),
         findMany: vi.fn(),
         update: vi.fn().mockResolvedValue({}),
       },
@@ -52,6 +52,7 @@ describe('ScannerService', () => {
   it('arms the nightly scan (nextScanAt) and advances the cursor when the pipeline completes', async () => {
     gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
     aiMock.classifyEmail.mockResolvedValue({ title: 'Technical assessment' });
+    prismaMock.user.findUnique.mockResolvedValue({ notificationTime: '08:00' });
 
     const windowEnd = new Date();
     await service.runScanPipeline(
@@ -69,7 +70,32 @@ describe('ScannerService', () => {
     expect(userUpdate.data.gmailConnected).toBe(true);
     expect(userUpdate.data.nextScanAt).toBeInstanceOf(Date);
     expect(userUpdate.data.nextScanAt.getTime()).toBeGreaterThan(Date.now());
+    expect(userUpdate.data.nextNotifyAt).toBeInstanceOf(Date);
+    expect(userUpdate.data.nextNotifyAt.getTime()).toBeGreaterThan(Date.now());
     expect(userUpdate.data.lastScannedAt).toEqual(windowEnd);
+  });
+
+  it('skips a poison email instead of failing the whole scan', async () => {
+    const poison = { ...candidateEmail, id: 'msg-poison' };
+    gmailMock.fetchEmails.mockResolvedValue([poison, candidateEmail]);
+    aiMock.classifyEmail
+      .mockRejectedValueOnce(new Error('Gemini 429 rate limited'))
+      .mockResolvedValueOnce({ title: 'Technical assessment' });
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    expect(aiMock.classifyEmail).toHaveBeenCalledTimes(2);
+    expect(eventsMock.createDetectedEvent).toHaveBeenCalledTimes(1);
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
+    // cursor must still advance: the failing email is skipped, not fatal
+    expect(prismaMock.user.update).toHaveBeenCalled();
   });
 
   it('does not send heuristic-blocked emails to the AI', async () => {
