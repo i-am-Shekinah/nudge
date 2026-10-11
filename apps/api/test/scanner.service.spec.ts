@@ -133,6 +133,51 @@ describe('ScannerService', () => {
     expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
   });
 
+  it('chains an immediate follow-up scan when a chunk leaves the cursor behind', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
+    aiMock.classifyEmail.mockResolvedValue(null);
+
+    const staleWindowEnd = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h behind
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(staleWindowEnd.getTime() - 3 * 24 * 3600 * 1000),
+      staleWindowEnd,
+      'UTC',
+    );
+
+    const userUpdate = prismaMock.user.update.mock.calls.find(
+      ([args]: any[]) => args.where.id === userId,
+    )?.[0];
+
+    // next scan in ~60s (catch-up mode), not tomorrow's midnight
+    const delay = userUpdate.data.nextScanAt.getTime() - Date.now();
+    expect(delay).toBeGreaterThan(0);
+    expect(delay).toBeLessThan(5 * 60 * 1000);
+  });
+
+  it('reports incremental progress so the onboarding counter is honest', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      ...candidateEmail,
+      id: `msg-${i}`,
+    }));
+    gmailMock.fetchEmails.mockResolvedValue(many);
+    aiMock.classifyEmail.mockResolvedValue(null);
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    const progressWrites = prismaMock.scanLog.update.mock.calls
+      .map(([args]: any[]) => args.data.emailsScanned)
+      .filter((n: number) => n === 10 || n === 20);
+    expect(progressWrites).toEqual([10, 20]);
+  });
+
   it('triggerBackfill skips users whose backfill already ran', async () => {
     prismaMock.user.findUnique.mockResolvedValue({
       id: userId,

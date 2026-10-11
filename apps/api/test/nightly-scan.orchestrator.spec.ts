@@ -73,6 +73,20 @@ describe('NightlyScanOrchestrator', () => {
     );
   });
 
+  it('bounds a long-downtime catch-up to a 3-day chunk instead of one marathon scan', async () => {
+    const cursor = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+    prismaMock.user.findMany.mockResolvedValue([
+      { ...baseUser, lastScannedAt: cursor },
+    ]);
+
+    const { windowStart, windowEnd } = await scanWindowOf();
+
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    expect(windowStart.getTime()).toBe(cursor.getTime() - 60 * 1000);
+    expect(windowEnd.getTime()).toBe(windowStart.getTime() + threeDays);
+    expect(windowEnd.getTime()).toBeLessThan(Date.now());
+  });
+
   it('advances nextScanAt before launching the scan to prevent double-picking', async () => {
     prismaMock.user.findMany.mockResolvedValue([{ ...baseUser }]);
 

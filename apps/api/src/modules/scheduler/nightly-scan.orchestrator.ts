@@ -57,7 +57,12 @@ export class NightlyScanOrchestrator {
         const windowStart = cursor
           ? new Date(cursor.getTime() - 60 * 1000)
           : new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const windowEnd = now;
+        // Bound any single scan to 3 days; the pipeline chains a follow-up
+        // in 60s while the cursor is still behind (see runScanPipeline).
+        const MAX_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+        const windowEnd = new Date(
+          Math.min(now.getTime(), windowStart.getTime() + MAX_WINDOW_MS),
+        );
 
         const scanLog = await this.prisma.scanLog.create({
           data: {

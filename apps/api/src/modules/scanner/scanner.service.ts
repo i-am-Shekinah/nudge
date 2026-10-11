@@ -105,6 +105,8 @@ export class ScannerService {
       );
 
       let eventsCount = 0;
+      let processed = 0;
+      const PROGRESS_EVERY = 10;
 
       // 3. AI classification via Gemini 2.0 Flash
       for (const candidate of candidates) {
@@ -121,15 +123,6 @@ export class ScannerService {
               classified,
             );
             eventsCount++;
-
-            // Periodically update scan log progress
-            await this.prisma.scanLog.update({
-              where: { id: scanLogId },
-              data: {
-                emailsScanned: emails.length,
-                eventsDetected: eventsCount,
-              },
-            });
           }
         } catch (err: any) {
           // One poison email (rate limit, parser crash) must not fail the
@@ -137,6 +130,17 @@ export class ScannerService {
           this.logger.warn(
             `Classification failed for email ${candidate.id}, skipping: ${err.message}`,
           );
+        }
+
+        processed++;
+        if (processed % PROGRESS_EVERY === 0) {
+          await this.prisma.scanLog.update({
+            where: { id: scanLogId },
+            data: {
+              emailsScanned: processed,
+              eventsDetected: eventsCount,
+            },
+          });
         }
       }
 
@@ -156,19 +160,27 @@ export class ScannerService {
         select: { notificationTime: true },
       });
 
+      // If this scan was only a bounded chunk of a long catch-up, chain the
+      // next one in 60s instead of waiting a full day for the next midnight.
+      const completedAt = new Date();
+      const stillBehind =
+        completedAt.getTime() - windowEnd.getTime() > 10 * 60 * 1000;
+
       await this.prisma.user.update({
         where: { id: userId },
         data: {
           gmailConnected: true,
           lastBackfillAt: new Date(),
           // Arm the nightly scan; without this a user is never due (nextScanAt stays null)
-          nextScanAt: getNextMidnight(userTimezone, new Date()),
+          nextScanAt: stillBehind
+            ? new Date(completedAt.getTime() + 60 * 1000)
+            : getNextMidnight(userTimezone, completedAt),
           // Same arming for the morning digest (nextNotifyAt is otherwise only
           // set when the user edits settings)
           nextNotifyAt: getNextScheduledTime(
             scanUser?.notificationTime ?? '07:00',
             userTimezone,
-            new Date(),
+            completedAt,
           ),
           // Advance the scan cursor only on success; failed scans leave the
           // gap for the next run to cover (event upserts dedupe any overlap)
