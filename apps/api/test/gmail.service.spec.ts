@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GmailService } from '../src/modules/gmail/gmail.service.js';
 
+// googleapis is instantiated inside getAuthenticatedClient, so the OAuth2
+// client is mocked at module level; __refreshImpl lets each test steer it.
+vi.mock('googleapis', () => ({
+  google: {
+    auth: {
+      OAuth2: class {
+        setCredentials() {}
+        refreshAccessToken() {
+          return (globalThis as any).__refreshImpl();
+        }
+      },
+    },
+    gmail: vi.fn(() => ({ users: { messages: {} } })),
+  },
+}));
+
 describe('GmailService.fetchEmails', () => {
   let service: GmailService;
   let listMock: any;
@@ -140,5 +156,122 @@ describe('GmailService.fetchEmails', () => {
 
     expect(emails).toEqual([]);
     expect(clientSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('GmailService.fetchEmailContent', () => {
+  let service: GmailService;
+  let getMock: any;
+
+  const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64url');
+
+  beforeEach(() => {
+    getMock = vi.fn();
+    service = new GmailService(
+      { get: vi.fn().mockReturnValue('fake-client-id') } as any,
+      { user: { update: vi.fn() } } as any,
+      { getUserTokens: vi.fn() } as any,
+    );
+    vi.spyOn(service, 'getAuthenticatedClient').mockResolvedValue({
+      users: { messages: { get: getMock } },
+    } as any);
+  });
+
+  it('prefers the text/plain part of a multipart body', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        payload: {
+          mimeType: 'multipart/alternative',
+          parts: [
+            { mimeType: 'text/plain', body: { data: b64('Deadline: Monday 2pm') } },
+            { mimeType: 'text/html', body: { data: b64('<p>Deadline: Monday 2pm</p>') } },
+          ],
+        },
+      },
+    });
+
+    expect(await service.fetchEmailContent('user-1', 'msg-1')).toBe(
+      'Deadline: Monday 2pm',
+    );
+  });
+
+  it('falls back to tag-stripped HTML when no plain part exists', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        payload: {
+          mimeType: 'text/html',
+          body: { data: b64('<div><b>Deadline:</b> Monday 2pm</div>') },
+        },
+      },
+    });
+
+    expect(await service.fetchEmailContent('user-1', 'msg-1')).toBe(
+      'Deadline: Monday 2pm',
+    );
+  });
+
+  it('truncates long bodies to a bounded excerpt', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        payload: { mimeType: 'text/plain', body: { data: b64('x'.repeat(9000)) } },
+      },
+    });
+
+    const excerpt = await service.fetchEmailContent('user-1', 'msg-1');
+    expect(excerpt.length).toBeLessThanOrEqual(4001); // 4000 chars + ellipsis
+  });
+
+  it('returns empty string in mock mode without an API call', async () => {
+    const mockService = new GmailService(
+      { get: vi.fn().mockReturnValue('mock-google-client-id') } as any,
+      {} as any,
+      {} as any,
+    );
+
+    expect(await mockService.fetchEmailContent('user-1', 'msg-1')).toBe('');
+    expect(getMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('GmailService.getAuthenticatedClient token refresh', () => {
+  const makeService = (tokenExpiresAt: Date | null) =>
+    new GmailService(
+      {
+        get: vi.fn((k: string) =>
+          k === 'GOOGLE_CLIENT_ID'
+            ? 'real-client-id'
+            : k === 'ENCRYPTION_KEY'
+              ? 'ab'.repeat(32)
+              : 'secret',
+        ),
+      } as any,
+      { user: { update: vi.fn().mockResolvedValue({}) } } as any,
+      {
+        getUserTokens: vi.fn().mockResolvedValue({
+          accessToken: 'stored-access',
+          refreshToken: 'stored-refresh',
+          tokenExpiresAt,
+        }),
+      } as any,
+    );
+
+  it('throws when refresh fails and the stored token is already expired', async () => {
+    (globalThis as any).__refreshImpl = () =>
+      Promise.reject(new Error('invalid_grant'));
+    const service = makeService(new Date(Date.now() - 60_000));
+
+    await expect(service.getAuthenticatedClient('user-1')).rejects.toThrow(
+      /refresh failed.*expired.*invalid_grant/i,
+    );
+  });
+
+  it('continues on grace when refresh fails but the stored token is still valid', async () => {
+    (globalThis as any).__refreshImpl = () =>
+      Promise.reject(new Error('socket hang up'));
+    const service = makeService(new Date(Date.now() + 2 * 60_000));
+
+    await expect(
+      service.getAuthenticatedClient('user-1'),
+    ).resolves.toBeDefined();
   });
 });

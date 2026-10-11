@@ -69,8 +69,17 @@ export class GmailService {
 
         oauth2Client.setCredentials(credentials);
       } catch (err: any) {
-        this.logger.error(
-          `Failed to refresh OAuth token for user ${userId}: ${err.message}`,
+        // Grace only makes sense while the stored token still works. If it is
+        // already past expiry, continuing guarantees a misleading 401 from
+        // every API call — surface the refresh failure instead.
+        const expired = !tokens.tokenExpiresAt || tokens.tokenExpiresAt.getTime() <= Date.now();
+        if (expired) {
+          throw new Error(
+            `OAuth token refresh failed for user ${userId} and the stored token is expired: ${err.message}`,
+          );
+        }
+        this.logger.warn(
+          `Token refresh failed for user ${userId}, but the stored token is still valid: ${err.message}`,
         );
       }
     }
@@ -157,6 +166,66 @@ export class GmailService {
       results.push(...batch.filter((email): email is EmailDto => email !== null));
     }
     return results;
+  }
+
+  /**
+   * Fetches a transient text excerpt of one message's body, for date/deadline
+   * extraction at classification time ONLY. The text is passed straight to the
+   * prompt and never written to the database or any log.
+   * Errors propagate: the caller degrades to snippet-only classification.
+   */
+  async fetchEmailContent(userId: string, messageId: string): Promise<string> {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId || clientId === 'mock-google-client-id') {
+      return '';
+    }
+
+    const gmail = await this.getAuthenticatedClient(userId);
+    const res = await gmail.users.messages.get({
+      userId: 'me',
+      id: messageId,
+      format: 'full',
+    });
+
+    const text = this.extractBodyText(res.data.payload);
+    const BODY_CHAR_LIMIT = 4000;
+    return text.length > BODY_CHAR_LIMIT
+      ? `${text.slice(0, BODY_CHAR_LIMIT)}…`
+      : text;
+  }
+
+  private extractBodyText(
+    payload?: {
+      mimeType?: string | null;
+      body?: { data?: string | null } | null;
+      parts?: Array<{ mimeType?: string | null; body?: { data?: string | null } | null; parts?: any[] } | null> | null;
+    } | null,
+  ): string {
+    if (!payload) return '';
+
+    const decode = (data?: string | null) =>
+      data
+        ? Buffer.from(data, 'base64url').toString('utf8')
+        : '';
+
+    const collect = (
+      part: { mimeType?: string | null; body?: { data?: string | null } | null; parts?: any[] } | undefined | null,
+      kind: 'plain' | 'html',
+    ): string => {
+      if (!part?.mimeType) return '';
+      if (part.mimeType === `text/${kind}`) return decode(part.body?.data);
+      return (part.parts ?? [])
+        .map((sub) => collect(sub, kind))
+        .filter(Boolean)
+        .join('\n');
+    };
+
+    const plain = collect(payload as any, 'plain');
+    if (plain.trim()) return plain;
+
+    const html = collect(payload as any, 'html');
+    // crude tag-strip; this text only ever goes into the prompt
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   /**

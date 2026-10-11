@@ -65,10 +65,33 @@ Then fill in the required values in both files. See the [Environment Variables](
 
 ### 3. Set up the database
 
-```powershell
-# Run migrations against your Neon database
-pnpm prisma:migrate
+Local development runs against a **local PostgreSQL 16 instance** on `127.0.0.1:5432`, not Neon. Create the role and database once (run as a superuser). `CREATEDB` is required because `prisma migrate dev` creates and drops a *shadow database* on every run:
+
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE ROLE nudge LOGIN CREATEDB PASSWORD 'pick-a-local-password';
+CREATE DATABASE nudge OWNER nudge;
+SQL
 ```
+
+Point `DATABASE_URL` in `apps/api/.env` at it — no `sslmode` is needed locally, and use the explicit IPv4 address rather than `localhost` (`main.ts` disables IPv4/IPv6 connect racing, so a `::1`-first lookup would hang instead of falling back):
+
+```bash
+DATABASE_URL="postgresql://nudge:<password>@127.0.0.1:5432/nudge"
+```
+
+Then apply the committed schema history:
+
+```bash
+pnpm prisma:deploy   # runs prisma migrate deploy against DATABASE_URL
+```
+
+`prisma/migrations/` is now the source of truth. The first entry, `20261011000000_init`, was **baselined** by hand (`prisma migrate diff --from-empty --to-schema` + `migrate resolve --applied`) because the schema had previously been created with `prisma db push`, which leaves no history. From here on:
+
+- change `schema.prisma`, then `pnpm prisma:migrate` to generate and apply a real migration;
+- never use `prisma db push` again — it edits the database without recording a migration, and the next `migrate deploy` would then fail or diverge.
+
+Neon is still the production provider. Its connection string is kept commented out in `apps/api/.env`; the prod database has **not** been baselined yet, so `migrate deploy` against it will fail with `P3005` until the same `migrate resolve --applied 20261011000000_init` is run there.
 
 ### 4. Start development
 
@@ -113,7 +136,7 @@ pnpm dev:web
 | Create a new migration | `pnpm prisma:migrate` |
 | Open Prisma Studio (DB browser) | `pnpm prisma:studio` |
 | Regenerate Prisma client | `pnpm prisma:generate` |
-| Run migrations in production | `pnpm --filter @nudge/api prisma migrate deploy` |
+| Run migrations in production | `pnpm prisma:deploy` |
 
 > **Note:** All Prisma commands are run from the **monorepo root**, not from `apps/api`. The root `package.json` scripts handle the `--filter` flag for you.
 
@@ -137,7 +160,7 @@ This means TypeScript resolves `import { DetectedEventDto } from '@nudge/shared'
 
 | Variable | Description | Where to get it |
 |---|---|---|
-| `DATABASE_URL` | Neon PostgreSQL connection string | [neon.tech](https://neon.tech) |
+| `DATABASE_URL` | PostgreSQL connection string — local PG 16 for dev, Neon pooled in production | your local instance / [neon.tech](https://neon.tech) |
 | `JWT_SECRET` | 64-char random string for signing JWTs | `openssl rand -hex 64` |
 | `ENCRYPTION_KEY` | 64 hex chars (32 bytes) for token encryption | `openssl rand -hex 32` |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) |

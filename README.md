@@ -17,8 +17,8 @@
 **Nudge** autonomously scans your incoming emails for actionable events—such as technical assessments, job interviews, flight itineraries, doctor appointments, and project deadlines. 
 
 Instead of cluttering your calendar with automated guesswork, Nudge places **humans in the loop**:
-1. It analyzes message **metadata and snippets only** (zero full-body email storage).
-2. It classifies events using **Google Gemini 2.0 Flash** with strict structured output schemas.
+1. It analyzes message **metadata, snippets, and (for candidate emails only) a transient body excerpt** (zero email body storage).
+2. It classifies events using **Google Gemini Flash** with strict structured output schemas.
 3. It presents detected events on a streamlined dark-mode dashboard for your **Approval** or **Dismissal**.
 4. Upon approval, Nudge syncs the event to **Google Calendar** with an aggressive, customizable multi-stage reminder cadence (`3d, 1d, 1h, 30m, 5m`).
 5. Made a mistake? Hit **Undo** at any time to remove the Google Calendar entry and return the event to pending.
@@ -28,11 +28,11 @@ Instead of cluttering your calendar with automated guesswork, Nudge places **hum
 ## ✨ Key Features
 
 - 🛡️ **Privacy by Design**:
-  - **Zero Email Body Ingestion**: Only subject lines, sender metadata, and short snippet previews are evaluated.
+  - **Zero Email Body Storage**: Listings and pre-filtering use subject, sender metadata, and snippet previews only. Emails that pass the heuristic filter have their body fetched transiently for the classification prompt and then discarded — bodies are never persisted, logged, or cached.
   - **AES-256-GCM Token Encryption**: All Google OAuth access and refresh tokens are encrypted at rest with authenticated encryption.
   - **Automated 7-Day Purge**: Detected events and scan logs are automatically expunged from the database 7 days post-event date.
 
-- 🤖 **Gemini 2.0 Flash Classification Pipeline**:
+- 🤖 **Gemini Flash Classification Pipeline**:
   - Schema-enforced structured JSON output via Zod validation.
   - Automatic hallucination & past-date rejection.
   - Confidence scoring threshold (defaults to `>= 0.75`).
@@ -67,7 +67,7 @@ nudge/
 │   │   ├── src/
 │   │   │   ├── common/        # AES-256 crypto, timezone math, utilities
 │   │   │   ├── modules/
-│   │   │   │   ├── ai/        # Gemini 2.0 Flash prompt, schema & service
+│   │   │   │   ├── ai/        # Gemini Flash prompt, schema & service
 │   │   │   │   ├── auth/      # Google OAuth 2.0 & JWT authentication
 │   │   │   │   ├── calendar/  # Google Calendar API integration & BullMQ jobs
 │   │   │   │   ├── events/    # Detected events CRUD & approval workflow
@@ -100,7 +100,7 @@ nudge/
 flowchart TD
     subgraph Ingestion ["1. Discovery"]
         A[Gmail API] -->|Metadata & Snippets Only| B[Heuristic Blocklist Filter]
-        B -->|Passed Emails| C[Gemini 2.0 Flash]
+        B -->|Passed Emails| C[Gemini Flash]
         C -->|Zod Validated JSON| D[(Neon PostgreSQL)]
     end
 
@@ -189,10 +189,11 @@ cp apps/web/.env.example apps/web/.env.local
 
 ### 3. Database Setup
 
-Generate the Prisma Client and run migrations:
+Generate the Prisma Client and apply the committed schema history (local dev uses a local PostgreSQL 16 instance — see `docs/DEVELOPER_GUIDE.md`, step 3):
 
 ```bash
-pnpm prisma:migrate
+pnpm prisma:generate
+pnpm prisma:deploy
 ```
 
 ---
@@ -250,7 +251,7 @@ For the step-by-step server provisioning runbook, systemd service units, Nginx r
 
 ## 🔒 Security & Privacy Policy
 
-- **Snippet-Only Access**: Nudge requests the minimum viable Gmail API scopes (`gmail.readonly`, `calendar.events`) and restricts retrieval to email metadata and short snippet previews. Full message bodies are never downloaded, processed by LLMs, or persisted.
+- **Snippet-First Access**: Nudge requests the minimum viable Gmail API scopes (`gmail.readonly`, `calendar.events`) and evaluates listings and pre-filtering from metadata and snippet previews only. Bodies of heuristic-passing candidates are fetched transiently for the Gemini prompt and never downloaded beyond that, stored, or logged.
 - **Encrypted Credentials**: Tokens are safeguarded using authenticated AES-256-GCM encryption with 16-byte initialization vectors and auth tags.
 - **Data Retention**: Under our automated data retention lifecycle, all processed events, logs, and metadata are automatically purged 7 days after the event timestamp.
 

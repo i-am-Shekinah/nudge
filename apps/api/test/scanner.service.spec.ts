@@ -37,7 +37,10 @@ describe('ScannerService', () => {
         update: vi.fn().mockResolvedValue({}),
       },
     };
-    gmailMock = { fetchEmails: vi.fn() };
+    gmailMock = {
+      fetchEmails: vi.fn(),
+      fetchEmailContent: vi.fn().mockResolvedValue('body excerpt for classification'),
+    };
     aiMock = { classifyEmail: vi.fn() };
     eventsMock = { createDetectedEvent: vi.fn().mockResolvedValue({}) };
 
@@ -131,6 +134,67 @@ describe('ScannerService', () => {
     expect(prismaMock.user.update).not.toHaveBeenCalled();
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
+  });
+
+  it('fails the scan and holds the cursor when classification errors on every candidate', async () => {
+    // A retired model / dead API key is a systematic outage, not poison emails:
+    // "0 events" must not be recorded as a success over an unprocessed window.
+    gmailMock.fetchEmails.mockResolvedValue([
+      candidateEmail,
+      { ...candidateEmail, id: 'msg-2' },
+    ]);
+    aiMock.classifyEmail.mockRejectedValue(
+      new Error('model gemini-2.0-flash is no longer available'),
+    );
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
+    expect(finalUpdate.data.errorMessage).toMatch(/all 2 candidates/i);
+  });
+
+  it('classifies candidates with a transient body excerpt so buried deadlines are visible', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
+    gmailMock.fetchEmailContent.mockResolvedValue('Deadline: Monday, 12 October 2026');
+    aiMock.classifyEmail.mockResolvedValue(null);
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    const passed = aiMock.classifyEmail.mock.calls[0][0];
+    expect(passed.body).toBe('Deadline: Monday, 12 October 2026');
+  });
+
+  it('degrades to snippet-only classification when the body fetch fails', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
+    gmailMock.fetchEmailContent.mockRejectedValue(new Error('429 rate limited'));
+    aiMock.classifyEmail.mockResolvedValue(null);
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    expect(aiMock.classifyEmail).toHaveBeenCalledTimes(1);
+    expect(aiMock.classifyEmail.mock.calls[0][0].body).toBeUndefined();
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
   });
 
   it('chains an immediate follow-up scan when a chunk leaves the cursor behind', async () => {

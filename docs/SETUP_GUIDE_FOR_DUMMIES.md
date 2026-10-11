@@ -49,6 +49,9 @@ This outputs:
 ### Step 3: Keys from External Services
 
 #### 4. `DATABASE_URL` — [Neon PostgreSQL](https://neon.tech)
+
+> **Skip this step for day-to-day local development.** Local dev now uses a local PostgreSQL 16 database (see `DEVELOPER_GUIDE.md`, step 3). Only follow the Neon instructions below for production, or when you specifically want real data locally.
+
 1. Sign up or log into **Neon**.
 2. Create a project named `nudge`.
 3. Under **Dashboard > Connection Details**, select:

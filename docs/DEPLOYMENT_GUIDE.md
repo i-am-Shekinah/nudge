@@ -272,14 +272,15 @@ pnpm prisma:generate
 ```
 
 ### Step 6.2 — Apply Database Schema Migrations
-For production databases on Neon:
+For production databases on Neon, `prisma/migrations/` is the source of truth:
 ```bash
-# If using Prisma migration history:
 pnpm --filter @nudge/api exec prisma migrate deploy
-
-# If synchronizing directly with schema:
-pnpm --filter @nudge/api exec prisma db push
 ```
+
+> [!WARNING]
+> Do **not** use `prisma db push` against production. It alters the database without recording a
+> migration, so `prisma/migrations/` and the live schema diverge and later `migrate deploy` runs fail or
+> produce silent data loss (a renamed column becomes drop-and-recreate).
 
 > [!IMPORTANT]
 > **Safe Deployment Order**:
@@ -571,7 +572,7 @@ sudo systemctl restart nudge-api.service
 - [ ] **4. Install Runtime Environment** (fnm, Node.js v22 LTS, pnpm v12).
 - [ ] **5. Clone Repository & Install Dependencies** (`pnpm install --frozen-lockfile`).
 - [ ] **6. Configure Production `.env`** on server with `chmod 600`.
-- [ ] **7. Run Prisma Migrations** (`pnpm --filter @nudge/api exec prisma migrate deploy` or `prisma db push`).
+- [ ] **7. Run Prisma Migrations** (`pnpm --filter @nudge/api exec prisma migrate deploy`). One-time step if the database already has tables but no `prisma/migrations/` history: baseline it first with `prisma migrate resolve --applied 20261011000000_init`, otherwise the deploy fails with `P3005`.
 - [ ] **8. Build API** (`pnpm build:api`).
 - [ ] **9. Install and Start `systemd` Service** (`nudge-api.service`).
 - [ ] **10. Configure Nginx Reverse Proxy** (Proxy upstream to port 3001).

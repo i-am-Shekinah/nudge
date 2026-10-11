@@ -8,9 +8,10 @@
     "build:api": "pnpm --filter @nudge/api build",
     "build:web": "pnpm --filter @nudge/web build",
     "lint": "pnpm -r run lint",
-    "prisma:migrate": "pnpm --filter @nudge/api prisma migrate dev",
-    "prisma:studio": "pnpm --filter @nudge/api prisma studio",
-    "prisma:generate": "pnpm --filter @nudge/api prisma generate"
+    "prisma:migrate": "pnpm --filter @nudge/api exec prisma migrate dev",
+    "prisma:deploy": "pnpm --filter @nudge/api exec prisma migrate deploy",
+    "prisma:studio": "pnpm --filter @nudge/api exec prisma studio",
+    "prisma:generate": "pnpm --filter @nudge/api exec prisma generate"
   },
   "pnpm": {
     "approvedBuilds": [

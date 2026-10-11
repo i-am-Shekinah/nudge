@@ -24,12 +24,13 @@ export type AiClassifiedEvent = z.infer<typeof AiOutputSchema>;
 export function isValidDetectedEvent(
   output: AiClassifiedEvent,
   referenceNow: Date = new Date(),
+  confidenceThreshold: number = AI_CONFIDENCE_THRESHOLD,
 ): boolean {
   // 1. Must be flagged as time-sensitive
   if (!output.is_time_sensitive) return false;
 
   // 2. Must meet the confidence threshold
-  if (output.confidence < AI_CONFIDENCE_THRESHOLD) return false;
+  if (output.confidence < confidenceThreshold) return false;
 
   // 3. Must have a valid title
   if (!output.title || output.title.trim().length === 0) return false;

@@ -106,13 +106,30 @@ export class ScannerService {
 
       let eventsCount = 0;
       let processed = 0;
+      let classificationErrors = 0;
       const PROGRESS_EVERY = 10;
 
-      // 3. AI classification via Gemini 2.0 Flash
+      // 3. AI classification via Gemini
       for (const candidate of candidates) {
         try {
+          // Transient body excerpt so deadlines buried past the snippet are
+          // visible to the classifier; never stored, and failure degrades to
+          // snippet-only rather than dropping the email.
+          let emailWithContext = candidate;
+          try {
+            const body = await this.gmailService.fetchEmailContent(
+              userId,
+              candidate.id,
+            );
+            emailWithContext = { ...candidate, body };
+          } catch (err: any) {
+            this.logger.warn(
+              `Body fetch failed for email ${candidate.id}, classifying on snippet only: ${err.message}`,
+            );
+          }
+
           const classified = await this.aiService.classifyEmail(
-            candidate,
+            emailWithContext,
             userTimezone,
           );
 
@@ -127,6 +144,7 @@ export class ScannerService {
         } catch (err: any) {
           // One poison email (rate limit, parser crash) must not fail the
           // whole scan: that would stall the cursor and re-crash nightly.
+          classificationErrors++;
           this.logger.warn(
             `Classification failed for email ${candidate.id}, skipping: ${err.message}`,
           );
@@ -142,6 +160,15 @@ export class ScannerService {
             },
           });
         }
+      }
+
+      // Partial failures are poison emails; a 100% failure rate is a
+      // systematic AI outage (retired model, bad key) — treat the scan as
+      // failed so the cursor holds and the window is re-scanned later.
+      if (candidates.length > 0 && classificationErrors === candidates.length) {
+        throw new Error(
+          `AI classification failed for all ${candidates.length} candidates — holding scan cursor`,
+        );
       }
 
       // 4. Mark scan done & update User backfill timestamp
