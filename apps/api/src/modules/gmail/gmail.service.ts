@@ -79,95 +79,98 @@ export class GmailService {
   /**
    * Fetches metadata for emails within the specified date window.
    * NOTE: Does NOT fetch full email bodies, only subject, date, sender, and snippet.
+   * Fetch-level failures propagate so callers can mark the scan failed and keep
+   * the cursor at the un-scanned window instead of silently reporting zero mail.
    */
   async fetchEmails(
     userId: string,
     options: FetchEmailsOptions,
   ): Promise<EmailDto[]> {
-    try {
-      const gmail = await this.getAuthenticatedClient(userId);
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId || clientId === 'mock-google-client-id') {
+      this.logger.warn('Gmail credentials not configured. Returning empty inbox.');
+      return [];
+    }
 
-      // Build Gmail query
-      const sinceEpoch = Math.floor(options.since.getTime() / 1000);
-      let query = `after:${sinceEpoch}`;
-      if (options.until) {
-        const untilEpoch = Math.floor(options.until.getTime() / 1000);
-        query += ` before:${untilEpoch}`;
-      }
+    const gmail = await this.getAuthenticatedClient(userId);
 
-      const listRes = await gmail.users.messages.list({
+    // Build Gmail query
+    const sinceEpoch = Math.floor(options.since.getTime() / 1000);
+    let query = `after:${sinceEpoch}`;
+    if (options.until) {
+      const untilEpoch = Math.floor(options.until.getTime() / 1000);
+      query += ` before:${untilEpoch}`;
+    }
+
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults: 500,
+    });
+
+    const messages = [...(listRes.data.messages ?? [])];
+    let pageToken = listRes.data.nextPageToken;
+    while (pageToken) {
+      const nextRes = await gmail.users.messages.list({
         userId: 'me',
         q: query,
         maxResults: 500,
+        pageToken,
       });
+      messages.push(...(nextRes.data.messages ?? []));
+      pageToken = nextRes.data.nextPageToken;
+    }
 
-      const messages = [...(listRes.data.messages ?? [])];
-      let pageToken = listRes.data.nextPageToken;
-      while (pageToken) {
-        const nextRes = await gmail.users.messages.list({
-          userId: 'me',
-          q: query,
-          maxResults: 500,
-          pageToken,
-        });
-        messages.push(...(nextRes.data.messages ?? []));
-        pageToken = nextRes.data.nextPageToken;
-      }
-
-      if (messages.length === 0) {
-        return [];
-      }
-
-      const fetchOne = async (msg: (typeof messages)[number]) => {
-        if (!msg.id) return null;
-        try {
-          const detailRes = await gmail.users.messages.get({
-            userId: 'me',
-            id: msg.id,
-            format: 'metadata',
-            metadataHeaders: ['Subject', 'From', 'Date'],
-          });
-
-          const headers = detailRes.data.payload?.headers || [];
-          const getHeader = (name: string) =>
-            headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())
-              ?.value || '';
-
-          const subject = getHeader('Subject') || '(No Subject)';
-          const from = getHeader('From') || '';
-          const dateStr = getHeader('Date');
-          const date = dateStr ? new Date(dateStr) : new Date();
-          const snippet = detailRes.data.snippet || '';
-
-          return {
-            id: msg.id,
-            threadId: msg.threadId || msg.id,
-            subject,
-            from,
-            date: isNaN(date.getTime()) ? new Date() : date,
-            snippet,
-            gmailUrl: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
-          } as EmailDto;
-        } catch (err: any) {
-          this.logger.warn(`Could not fetch message metadata for ${msg.id}: ${err.message}`);
-          return null;
-        }
-      };
-
-      // Bounded concurrency: a paginated window can hold thousands of IDs
-      const METADATA_BATCH_SIZE = 50;
-      const results: EmailDto[] = [];
-      for (let i = 0; i < messages.length; i += METADATA_BATCH_SIZE) {
-        const batch = await Promise.all(
-          messages.slice(i, i + METADATA_BATCH_SIZE).map(fetchOne),
-        );
-        results.push(...batch.filter((email): email is EmailDto => email !== null));
-      }
-      return results;
-    } catch (err: any) {
-      this.logger.error(`Error in fetchEmails for user ${userId}: ${err.message}`);
-      // Return empty array on failure or local mock
+    if (messages.length === 0) {
       return [];
     }
+
+    const fetchOne = async (msg: (typeof messages)[number]) => {
+      if (!msg.id) return null;
+      try {
+        const detailRes = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'metadata',
+          metadataHeaders: ['Subject', 'From', 'Date'],
+        });
+
+        const headers = detailRes.data.payload?.headers || [];
+        const getHeader = (name: string) =>
+          headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())
+            ?.value || '';
+
+        const subject = getHeader('Subject') || '(No Subject)';
+        const from = getHeader('From') || '';
+        const dateStr = getHeader('Date');
+        const date = dateStr ? new Date(dateStr) : new Date();
+        const snippet = detailRes.data.snippet || '';
+
+        return {
+          id: msg.id,
+          threadId: msg.threadId || msg.id,
+          subject,
+          from,
+          date: isNaN(date.getTime()) ? new Date() : date,
+          snippet,
+          gmailUrl: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
+        } as EmailDto;
+      } catch (err: any) {
+        // A single unreadable message must not fail the whole scan.
+        this.logger.warn(`Could not fetch message metadata for ${msg.id}: ${err.message}`);
+        return null;
+      }
+    };
+
+    // Bounded concurrency: a paginated window can hold thousands of IDs
+    const METADATA_BATCH_SIZE = 50;
+    const results: EmailDto[] = [];
+    for (let i = 0; i < messages.length; i += METADATA_BATCH_SIZE) {
+      const batch = await Promise.all(
+        messages.slice(i, i + METADATA_BATCH_SIZE).map(fetchOne),
+      );
+      results.push(...batch.filter((email): email is EmailDto => email !== null));
+    }
+    return results;
   }
 }

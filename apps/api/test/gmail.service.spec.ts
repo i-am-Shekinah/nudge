@@ -69,4 +69,32 @@ describe('GmailService.fetchEmails', () => {
     expect(args.format).toBe('metadata');
     expect(args.metadataHeaders).toEqual(['Subject', 'From', 'Date']);
   });
+
+  it('rejects when messages.list fails, so the scan cannot report a false success', async () => {
+    listMock.mockRejectedValueOnce(
+      new Error('Client network socket disconnected before secure TLS connection'),
+    );
+
+    await expect(
+      service.fetchEmails('user-1', {
+        since: new Date(Date.now() - 86400000),
+      }),
+    ).rejects.toThrow('Client network socket disconnected');
+  });
+
+  it('returns an empty inbox without calling the API when credentials are unconfigured', async () => {
+    const mockService = new GmailService(
+      { get: vi.fn().mockReturnValue('mock-google-client-id') } as any,
+      { user: { update: vi.fn() } } as any,
+      { getUserTokens: vi.fn() } as any,
+    );
+    const clientSpy = vi.spyOn(mockService, 'getAuthenticatedClient');
+
+    const emails = await mockService.fetchEmails('user-1', {
+      since: new Date(Date.now() - 86400000),
+    });
+
+    expect(emails).toEqual([]);
+    expect(clientSpy).not.toHaveBeenCalled();
+  });
 });
