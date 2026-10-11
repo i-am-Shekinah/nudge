@@ -22,6 +22,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       callbackURL:
         configService.get<string>('GOOGLE_CALLBACK_URL') ||
         'http://localhost:3001/auth/google/callback',
+      // passport-google-oauth20 defaults to the deprecated
+      // www.googleapis.com/oauth2/* endpoints; the current ones live on
+      // different Google edges, so a route failure to one hostname no
+      // longer takes sign-in down with it.
+      tokenURL: 'https://oauth2.googleapis.com/token',
+      userProfileURL: 'https://openidconnect.googleapis.com/v1/userinfo',
       scope: [
         'email',
         'profile',
