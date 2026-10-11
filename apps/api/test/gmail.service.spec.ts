@@ -71,6 +71,7 @@ describe('GmailService.fetchEmails', () => {
   });
 
   it('rejects when messages.list fails, so the scan cannot report a false success', async () => {
+    (service as any).listRetryDelaysMs = [];
     listMock.mockRejectedValueOnce(
       new Error('Client network socket disconnected before secure TLS connection'),
     );
@@ -80,6 +81,49 @@ describe('GmailService.fetchEmails', () => {
         since: new Date(Date.now() - 86400000),
       }),
     ).rejects.toThrow('Client network socket disconnected');
+  });
+
+  it('retries a transient messages.list failure and succeeds within the same scan', async () => {
+    (service as any).listRetryDelaysMs = [1, 1];
+    listMock
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce({ data: { messages: [{ id: 'a' }] } });
+
+    const emails = await service.fetchEmails('user-1', {
+      since: new Date(Date.now() - 86400000),
+    });
+
+    expect(listMock).toHaveBeenCalledTimes(2);
+    expect(emails.map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('gives up after the bounded retries and propagates the failure', async () => {
+    (service as any).listRetryDelaysMs = [1, 1];
+    listMock.mockRejectedValue(new Error('ECONNRESET'));
+
+    await expect(
+      service.fetchEmails('user-1', {
+        since: new Date(Date.now() - 86400000),
+      }),
+    ).rejects.toThrow('ECONNRESET');
+
+    // 1 initial attempt + 2 retries, no infinite loop
+    expect(listMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry auth failures — they will not fix themselves', async () => {
+    (service as any).listRetryDelaysMs = [1, 1];
+    const err: any = new Error('Invalid Credentials');
+    err.response = { status: 401 };
+    listMock.mockRejectedValue(err);
+
+    await expect(
+      service.fetchEmails('user-1', {
+        since: new Date(Date.now() - 86400000),
+      }),
+    ).rejects.toThrow('Invalid Credentials');
+
+    expect(listMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns an empty inbox without calling the API when credentials are unconfigured', async () => {

@@ -9,6 +9,8 @@ import { EmailDto, FetchEmailsOptions } from './gmail.types.js';
 @Injectable()
 export class GmailService {
   private readonly logger = new Logger(GmailService.name);
+  // 3 attempts total: immediate, +2s, +8s — rides out a brief route flap
+  private readonly listRetryDelaysMs = [2_000, 8_000];
 
   constructor(
     private readonly configService: ConfigService,
@@ -102,24 +104,7 @@ export class GmailService {
       query += ` before:${untilEpoch}`;
     }
 
-    const listRes = await gmail.users.messages.list({
-      userId: 'me',
-      q: query,
-      maxResults: 500,
-    });
-
-    const messages = [...(listRes.data.messages ?? [])];
-    let pageToken = listRes.data.nextPageToken;
-    while (pageToken) {
-      const nextRes = await gmail.users.messages.list({
-        userId: 'me',
-        q: query,
-        maxResults: 500,
-        pageToken,
-      });
-      messages.push(...(nextRes.data.messages ?? []));
-      pageToken = nextRes.data.nextPageToken;
-    }
+    const messages = await this.listMessageIds(gmail, query);
 
     if (messages.length === 0) {
       return [];
@@ -172,5 +157,63 @@ export class GmailService {
       results.push(...batch.filter((email): email is EmailDto => email !== null));
     }
     return results;
+  }
+
+  /**
+   * Lists every message ID in the window, walking all pages. A transient
+   * network blip is retried so it does not fail the whole scan; the cursor
+   * stays as the backstop for hour-scale outages. Pagination restarts on
+   * retry, which is safe because the listing itself is read-only.
+   */
+  private async listMessageIds(
+    gmail: Awaited<ReturnType<GmailService['getAuthenticatedClient']>>,
+    query: string,
+  ): Promise<Array<{ id?: string | null; threadId?: string | null }>> {
+    let attempt = 0;
+    for (;;) {
+      try {
+        const listRes = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 500,
+        });
+
+        const messages = [...(listRes.data.messages ?? [])];
+        let pageToken = listRes.data.nextPageToken;
+        while (pageToken) {
+          const nextRes = await gmail.users.messages.list({
+            userId: 'me',
+            q: query,
+            maxResults: 500,
+            pageToken,
+          });
+          messages.push(...(nextRes.data.messages ?? []));
+          pageToken = nextRes.data.nextPageToken;
+        }
+        return messages;
+      } catch (err: any) {
+        if (attempt >= this.listRetryDelaysMs.length || !this.isTransientError(err)) {
+          throw err;
+        }
+        const delay = this.listRetryDelaysMs[attempt];
+        attempt++;
+        this.logger.warn(
+          `Gmail messages.list failed (attempt ${attempt}/${this.listRetryDelaysMs.length + 1}): ` +
+            `${err.message}. Retrying in ${delay}ms.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  private isTransientError(err: any): boolean {
+    const status = err?.response?.status ?? err?.status;
+    if (typeof status === 'number') {
+      return status >= 500 || status === 429;
+    }
+    const text = `${err?.code ?? ''} ${err?.message ?? ''}`;
+    return /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|disconnected|network/i.test(
+      text,
+    );
   }
 }
