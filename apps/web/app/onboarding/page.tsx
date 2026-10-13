@@ -61,8 +61,11 @@ export default function OnboardingPage() {
           }
         }
         setScanState((prev) => ({ ...prev, status: 'RUNNING' }));
-      } catch (err: any) {
-        setLogs((prev) => [...prev, `Scan trigger notice: ${err.message}`]);
+      } catch (err) {
+        setLogs((prev) => [
+          ...prev,
+          `Scan trigger notice: ${err instanceof Error ? err.message : String(err)}`,
+        ]);
       }
     };
 

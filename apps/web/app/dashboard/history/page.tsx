@@ -33,8 +33,8 @@ export default function HistoryPage() {
         const data = await res.json();
         setEvents(data.events || []);
       }
-    } catch (err: any) {
-      setNotice(`Error: ${err.message}`);
+    } catch (err) {
+      setNotice(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }

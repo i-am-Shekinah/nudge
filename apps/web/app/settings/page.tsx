@@ -60,8 +60,10 @@ export default function SettingsPage() {
           }
           setHasPush(data.hasPushSubscription);
         }
-      } catch (err: any) {
-        setMessage(`Error loading settings: ${err.message}`);
+      } catch (err) {
+        setMessage(
+          `Error loading settings: ${err instanceof Error ? err.message : String(err)}`,
+        );
       } finally {
         setLoading(false);
       }
@@ -86,8 +88,8 @@ export default function SettingsPage() {
         setMessage('✓ Timezone and notification time updated');
         setTimeout(() => setMessage(null), 3000);
       }
-    } catch (err: any) {
-      setMessage(`Save failed: ${err.message}`);
+    } catch (err) {
+      setMessage(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

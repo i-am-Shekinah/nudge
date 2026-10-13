@@ -44,8 +44,10 @@ export default function DashboardPage() {
         const data = await eventsRes.json();
         setEvents(data.events || []);
       }
-    } catch (err: any) {
-      setNotice(`Connection error: ${err.message}`);
+    } catch (err) {
+      setNotice(
+        `Connection error: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setLoading(false);
     }
