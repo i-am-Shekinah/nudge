@@ -3,9 +3,11 @@ import {
   Get,
   Patch,
   Post,
+  Delete,
   Body,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { SettingsService } from './settings.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -61,5 +63,25 @@ export class SettingsController {
   ) {
     await this.settingsService.savePushSubscription(userId, body.subscription);
     return { success: true, message: 'Push subscription saved' };
+  }
+
+  @Post('native-subscription')
+  @HttpCode(HttpStatus.OK)
+  async saveNativeSubscription(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token?: string; platform?: string },
+  ) {
+    if (!body.token || !body.platform) {
+      throw new BadRequestException('token and platform are required');
+    }
+    await this.settingsService.saveNativeSubscription(userId, body.token, body.platform);
+    return { success: true, message: 'Native push subscription saved' };
+  }
+
+  @Delete('native-subscription')
+  @HttpCode(HttpStatus.OK)
+  async clearNativeSubscription(@CurrentUser('id') userId: string) {
+    await this.settingsService.clearNativeSubscription(userId);
+    return { success: true, message: 'Native push subscription removed' };
   }
 }

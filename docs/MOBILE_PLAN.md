@@ -47,8 +47,22 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 > **Status (2026-10-13):** step 1 (refresh tokens) is done — see the
 > `SessionRefreshToken` model, `POST /auth/refresh`, 15-minute access JWTs,
 > and the `authFetch` refresh-on-401 helper in `apps/web/lib/api.ts`.
-> Steps 2–3 (native push, store ship) remain; native push needs a Firebase
-> project (FCM) and an Apple Developer account (APNs key).
+> Step 2 is built and tested (FCM v1 transport, `native-subscription`
+> endpoints, dispatcher, shell registration). **Android side is live:**
+> Firebase project `nudge-ede5e` wired in (`google-services.json` in
+> `apps/mobile/android/app/`, service-account key at gitignored
+> `apps/api/secrets/fcm-service-account.json`, env vars `FCM_PROJECT_ID` +
+> `FCM_SERVICE_ACCOUNT_JSON`).
+>
+> **Open gaps:**
+> 1. *Firebase IAM (one click, user action):* the `nudge-push` service
+>    account needs the **Firebase Cloud Messaging Admin** role — OAuth
+>    succeeds today but `messages:send` returns 403 until granted
+>    (Console → IAM & Admin → add principal → role).
+> 2. *Apple Developer Program — not started (deferred by choice).* No
+>    account enrollment, no App ID with Push capability, no `.p8` APNs
+>    key; iOS platform cannot be added to the shell without a Mac anyway.
+>    APNs transport in the dispatcher is a mock until this lands.
 
 
 1. **Refresh tokens** (committed, not "decide later"):
@@ -62,11 +76,30 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 
 **Done when:** a phone idle for 10 days opens without a login screen, and tapping a push lands on the referenced event.
 
+## Analytics & privacy split
+
+- **App analytics:** enable Google Analytics for Firebase at project creation (free; starts the install/retention baseline immediately — enabling it later loses history). Crashlytics gets added to the shell at the same time; it is the primary visibility into WebView crashes on OEM Android builds.
+- **Product analytics stays first-party:** the whole core loop (scan → detect → push → tap → approve/ignore) is already persisted in Postgres. Retention, funnel and push-effectiveness metrics are derived by querying our own DB — no third-party SDK touches user data for this, which keeps the Gmail-scope privacy story credible.
+- **Consequence:** enabling GA must be reflected honestly in the Apple privacy "nutrition label", Play Data Safety form, and the iOS privacy manifest (see Phase 4).
+
+## Phase 4 — Privacy & legal compliance (store-mandated docs) (~2–3 days)
+
+Public store apps are expected to ship these; Apple actively rejects for missing ones.
+
+1. **Privacy Policy** (hosted at a stable URL, e.g. `nudge.app/privacy`): what is collected (name, email, avatar, Gmail message *metadata*, calendar event data, push tokens, analytics), what is never stored (no raw email bodies — already the design), retention (events purged 7 days after the event date), third parties (Google OAuth, FCM/APNs, Resend, Firebase Analytics), and contact info.
+2. **Terms of Service** (`nudge.app/terms`): acceptable use, the read-only Gmail guarantee, liability limits, termination.
+3. **Account deletion (Apple guideline 5.1.1(v)):** mandatory in-app + web account deletion that cascades user rows, tokens and stored subscriptions. Needs an API endpoint (`DELETE /auth/account`) + a Settings UI entry — currently missing.
+4. **Gmail API disclosure:** Google requires a limited-use disclosure plus links to Google's Privacy Policy/Terms wherever Gmail scopes are requested (onboarding + Settings), and CASA-tier review if the app scales.
+5. **Store forms:** Apple privacy nutrition label (data-type matrix incl. Firebase Analytics if enabled), Play Data Safety declaration, iOS privacy manifest (`PrivacyInfo.xcprivacy` — Capacitor plugins ship their own; merged at `cap add ios` time), and the privacy-policy URL fields on both consoles.
+6. **Support URL + store listing copy** (both stores require a support URL).
+
+**Done when:** both store submission forms can be completed truthfully from these artifacts with zero open questions.
+
 ## Assumptions
 
 - The API remains the single source of truth; scanner / AI / calendar are untouched.
 - The web app keeps its current hosted deployment; PWA and shell share the identical bundle.
-- Only two API additions: the code-exchange endpoint and the refresh-token flow. No rewrite.
+- API additions stay additive: code exchange, refresh tokens, native-push subscriptions (and account deletion in Phase 4). No rewrite.
 
 ## Risks
 

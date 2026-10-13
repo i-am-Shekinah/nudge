@@ -25,6 +25,8 @@ model User {
   notificationTime String         @default("07:00") // "HH:MM" in user's timezone
   timezone         String         @default("UTC")   // IANA timezone string
   pushSubscription Json?          // Web Push API subscription object
+  nativePushToken    String?      // FCM registration token (Android) or APNs device token (iOS)
+  nativePushPlatform String?      // 'android' | 'ios'
   reminderPreset   ReminderPreset @default(DEFAULT)
   customReminders  Int[]          @default([4320, 1440, 60, 30, 5]) // minutes before event
   gmailConnected   Boolean        @default(false)

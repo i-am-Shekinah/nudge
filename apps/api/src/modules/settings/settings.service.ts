@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { getNextMidnight, getNextScheduledTime } from '../../common/timezone.util.js';
@@ -25,6 +25,7 @@ export class SettingsService {
         reminderPreset: true,
         customReminders: true,
         pushSubscription: true,
+        nativePushToken: true,
         gmailConnected: true,
       },
     });
@@ -36,6 +37,7 @@ export class SettingsService {
     return {
       ...user,
       hasPushSubscription: !!user.pushSubscription,
+      hasNativePush: !!user.nativePushToken,
     };
   }
 
@@ -117,6 +119,23 @@ export class SettingsService {
       data: {
         pushSubscription: subscription,
       },
+    });
+  }
+
+  async saveNativeSubscription(userId: string, token: string, platform: string) {
+    if (!['android', 'ios'].includes(platform)) {
+      throw new BadRequestException(`Unsupported platform: ${platform}`);
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { nativePushToken: token, nativePushPlatform: platform },
+    });
+  }
+
+  async clearNativeSubscription(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { nativePushToken: null, nativePushPlatform: null },
     });
   }
 

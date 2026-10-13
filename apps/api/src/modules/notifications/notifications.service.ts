@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import webpush from 'web-push';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { DetectedEvent, User } from '@prisma/client';
+import { FcmService } from './fcm.service.js';
 
 @Injectable()
 export class NotificationsService {
@@ -14,6 +15,7 @@ export class NotificationsService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly fcm: FcmService,
   ) {
     const resendKey = this.configService.get<string>('RESEND_API_KEY');
     if (resendKey && resendKey !== 'mock-resend-key') {
@@ -103,14 +105,12 @@ export class NotificationsService {
       this.logger.log(`[MOCK EMAIL] Morning digest to ${user.email} (${count} events)`);
     }
 
-    // 2. Send Web Push Notification
-    if (user.pushSubscription) {
-      await this.sendPush(user.pushSubscription, {
-        title: `Nudge: ${count} New Event${count > 1 ? 's' : ''}`,
-        body: `You have ${count} pending event${count > 1 ? 's' : ''} to review.`,
-        url: `${frontendUrl}/dashboard`,
-      });
-    }
+    // 2. Send push (native preferred over web push)
+    await this.dispatch(user, {
+      title: `Nudge: ${count} New Event${count > 1 ? 's' : ''}`,
+      body: `You have ${count} pending event${count > 1 ? 's' : ''} to review.`,
+      url: `${frontendUrl}/dashboard`,
+    });
   }
 
   /**
@@ -133,6 +133,26 @@ export class NotificationsService {
       } catch (err: any) {
         this.logger.error(`Failed to send calendar error email: ${err.message}`);
       }
+    }
+  }
+
+  /**
+   * Chooses the delivery channel: native push when the user has a device
+   * token (one notification per user, so native suppresses web push),
+   * otherwise the existing web-push subscription.
+   */
+  async dispatch(user: User, payload: { title: string; body: string; url: string }) {
+    if (user.nativePushToken) {
+      if (user.nativePushPlatform === 'android') {
+        await this.fcm.send(user.nativePushToken, payload);
+      } else {
+        // APNs transport lands with the .p8 key (Phase 3b, iOS).
+        this.logger.log(`[MOCK APNs] ${payload.title}: ${payload.body}`);
+      }
+      return;
+    }
+    if (user.pushSubscription) {
+      await this.sendPush(user.pushSubscription, payload);
     }
   }
 

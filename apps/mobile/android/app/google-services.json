@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "489795610298",
+    "project_id": "nudge-ede5e",
+    "storage_bucket": "nudge-ede5e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:489795610298:android:1d413d657d2b3898840483",
+        "android_client_info": {
+          "package_name": "app.nudge.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcISackcUnftgcPgRIfnWpK3mtnHGcAN0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

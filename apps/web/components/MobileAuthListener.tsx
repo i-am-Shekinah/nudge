@@ -46,6 +46,9 @@ export function MobileAuthListener() {
           }
           const { token, refreshToken, isNewUser } = await res.json();
           await setTokens(token, refreshToken);
+          // Push registration needs a fresh session; fire and forget so a
+          // denied permission can never block the login redirect.
+          void (await import('../lib/native-push')).registerNativePush();
           router.replace(isNewUser ? '/onboarding' : '/dashboard');
         } catch {
           router.replace('/?error=auth_failed');
