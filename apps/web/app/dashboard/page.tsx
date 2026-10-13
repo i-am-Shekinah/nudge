@@ -199,9 +199,16 @@ export default function DashboardPage() {
                 fontSize: '0.85rem',
                 fontWeight: 600,
                 cursor: scanning ? 'default' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
               }}
             >
-              {scanning ? '⚡ Scanning…' : '⚡ Scan Now'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              {scanning ? 'Scanning…' : 'Scan Now'}
             </button>
 
             <button
@@ -218,9 +225,17 @@ export default function DashboardPage() {
                 fontSize: '0.85rem',
                 fontWeight: 500,
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
               }}
             >
-              ↻ Refresh
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              Refresh
             </button>
           </div>
         </div>
