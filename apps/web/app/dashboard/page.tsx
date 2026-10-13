@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<{ email: string; avatarUrl?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -91,6 +92,57 @@ export default function DashboardPage() {
     }
   };
 
+  const handleScanNow = async () => {
+    const token = localStorage.getItem('nudge_token');
+    setScanning(true);
+    setNotice('Scanning your inbox for new events…');
+    try {
+      const res = await fetch(`${apiUrl}/scans/run-now`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setNotice(
+          data?.message || 'Could not start the scan. Please try again.',
+        );
+        setTimeout(() => setNotice(null), 7000);
+        setScanning(false);
+        return;
+      }
+
+      // Poll until the scan reaches a terminal state (bounded to 5 min)
+      const deadline = Date.now() + 5 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const latest = await fetch(`${apiUrl}/scans/latest`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!latest.ok) continue;
+        const { scan } = await latest.json();
+        if (scan && (scan.status === 'DONE' || scan.status === 'FAILED')) {
+          await fetchDashboardData();
+          setNotice(
+            scan.status === 'DONE'
+              ? `Scan complete — ${scan.eventsDetected} ${scan.eventsDetected === 1 ? 'event' : 'events'} detected.`
+              : `This scan hit a problem (${scan.errorMessage || 'unknown'}). No mail is lost — it will retry automatically at midnight.`,
+          );
+          setTimeout(() => setNotice(null), 8000);
+          setScanning(false);
+          return;
+        }
+      }
+      setNotice('The scan is taking longer than usual — results will appear here shortly.');
+    } catch (err) {
+      setNotice(
+        `Connection error: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setScanning(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar
@@ -161,24 +213,45 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              setLoading(true);
-              fetchDashboardData();
-            }}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-primary)',
-              fontSize: '0.85rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            ↻ Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '0.6rem' }}>
+            <button
+              onClick={handleScanNow}
+              disabled={scanning}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                backgroundColor: scanning
+                  ? 'rgba(99, 102, 241, 0.25)'
+                  : 'var(--accent-primary)',
+                border: '1px solid var(--border-subtle)',
+                color: '#ffffff',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: scanning ? 'default' : 'pointer',
+              }}
+            >
+              {scanning ? '⚡ Scanning…' : '⚡ Scan Now'}
+            </button>
+
+            <button
+              onClick={() => {
+                setLoading(true);
+                fetchDashboardData();
+              }}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              ↻ Refresh
+            </button>
+          </div>
         </div>
 
         {/* Events List */}
@@ -196,7 +269,7 @@ export default function DashboardPage() {
           <EmptyState
             icon="✨"
             title="All caught up!"
-            description="No pending events awaiting decision. Nudge will automatically scan incoming emails tonight at midnight."
+            description="No pending events awaiting decision. Hit ⚡ Scan Now to check your inbox, or let Nudge scan automatically at midnight."
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

@@ -11,6 +11,11 @@ export class ScannerController {
     return this.scannerService.triggerBackfill(userId);
   }
 
+  @Post('scans/run-now')
+  async runNow(@CurrentUser('id') userId: string) {
+    return this.scannerService.triggerManualScan(userId);
+  }
+
   @Get('scans/latest')
   async getLatestScan(@CurrentUser('id') userId: string) {
     const scan = await this.scannerService.getLatestScan(userId);

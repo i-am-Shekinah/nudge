@@ -2,6 +2,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { GmailService } from '../gmail/gmail.service.js';
@@ -264,6 +266,76 @@ export class ScannerService {
         },
       });
     }
+  }
+
+  /**
+   * On-demand scan from the dashboard, gated to one scan per hour. The gate
+   * counts ANY recent scan (nightly included): fresh results are fresh
+   * results, and re-scanning on top of them only burns quota.
+   */
+  async triggerManualScan(userId: string) {
+    const MANUAL_SCAN_INTERVAL_MS = 60 * 60 * 1000;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const lastScan = await this.prisma.scanLog.findFirst({
+      where: { userId },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (lastScan) {
+      const elapsed = Date.now() - lastScan.startedAt.getTime();
+      if (elapsed < MANUAL_SCAN_INTERVAL_MS) {
+        const waitMinutes = Math.ceil(
+          (MANUAL_SCAN_INTERVAL_MS - elapsed) / (60 * 1000),
+        );
+        throw new HttpException(
+          `We just finished a scan. The next one is available in ${waitMinutes} ${waitMinutes === 1 ? 'minute' : 'minutes'} — or no need to wait at all: Nudge scans your inbox automatically at midnight.`,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    const cursor = user.lastScannedAt ?? user.lastBackfillAt;
+    const windowStart = cursor
+      ? new Date(cursor.getTime() - 60 * 1000)
+      : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Same bound as the nightly orchestrator: a very old cursor chains
+    // follow-up scans instead of flooding one giant window.
+    const MAX_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+    const windowEnd = new Date(
+      Math.min(Date.now(), windowStart.getTime() + MAX_WINDOW_MS),
+    );
+
+    const scanLog = await this.prisma.scanLog.create({
+      data: {
+        userId,
+        status: ScanStatus.RUNNING,
+        windowStart,
+        windowEnd,
+        emailsScanned: 0,
+        eventsDetected: 0,
+      },
+    });
+
+    this.runScanPipeline(userId, scanLog.id, windowStart, windowEnd, user.timezone).catch(
+      (err) => {
+        this.logger.error(
+          `Manual scan failed for user ${userId}: ${err.message}`,
+          err.stack,
+        );
+      },
+    );
+
+    return {
+      started: true,
+      scanLogId: scanLog.id,
+      message: 'Scan started. New events will appear here when it finishes.',
+    };
   }
 
   /**

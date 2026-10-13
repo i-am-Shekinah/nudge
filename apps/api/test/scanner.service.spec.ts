@@ -38,6 +38,7 @@ describe('ScannerService', () => {
       scanLog: {
         create: vi.fn().mockResolvedValue({ id: 'scan-1' }),
         update: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue(null),
       },
     };
     gmailMock = {
@@ -337,5 +338,56 @@ describe('ScannerService', () => {
 
     expect(result).toMatchObject({ alreadyDone: true });
     expect(gmailMock.fetchEmails).not.toHaveBeenCalled();
+  });
+
+  it('triggerManualScan starts a scan from the cursor when none ran recently', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: userId,
+      timezone: 'UTC',
+      lastScannedAt: new Date(Date.now() - 2 * 3600 * 1000),
+    });
+    gmailMock.fetchEmails.mockResolvedValue([]);
+    aiMock.classifyEmailBatch.mockResolvedValue(new Map());
+
+    const result = await service.triggerManualScan(userId);
+
+    expect(result.started).toBe(true);
+    expect(prismaMock.scanLog.create).toHaveBeenCalled();
+    const window = prismaMock.scanLog.create.mock.calls[0][0].data;
+    // starts at cursor minus the 1-minute overlap, ends ~now
+    expect(window.windowStart.getTime()).toBeLessThan(Date.now() - 3600 * 1000);
+    expect(window.windowEnd.getTime()).toBeGreaterThan(Date.now() - 60 * 1000);
+  });
+
+  it('triggerManualScan rejects with a friendly wait message inside the hour', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: userId,
+      timezone: 'UTC',
+      lastScannedAt: new Date(),
+    });
+    prismaMock.scanLog.findFirst.mockResolvedValue({
+      startedAt: new Date(Date.now() - 10 * 60 * 1000), // 10 min ago
+    });
+
+    await expect(service.triggerManualScan(userId)).rejects.toThrow(
+      /available in 50 minutes.*midnight/i,
+    );
+    expect(prismaMock.scanLog.create).not.toHaveBeenCalled();
+  });
+
+  it('triggerManualScan allows a scan once the hour has passed', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: userId,
+      timezone: 'UTC',
+      lastScannedAt: new Date(),
+    });
+    prismaMock.scanLog.findFirst.mockResolvedValue({
+      startedAt: new Date(Date.now() - 61 * 60 * 1000), // 61 min ago
+    });
+    gmailMock.fetchEmails.mockResolvedValue([]);
+    aiMock.classifyEmailBatch.mockResolvedValue(new Map());
+
+    const result = await service.triggerManualScan(userId);
+    expect(result.started).toBe(true);
   });
 });
