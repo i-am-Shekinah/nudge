@@ -91,7 +91,10 @@ pnpm prisma:deploy   # runs prisma migrate deploy against DATABASE_URL
 - change `schema.prisma`, then `pnpm prisma:migrate` to generate and apply a real migration;
 - never use `prisma db push` again — it edits the database without recording a migration, and the next `migrate deploy` would then fail or diverge.
 
-Neon is still the production provider. Its connection string is kept commented out in `apps/api/.env`; the prod database has **not** been baselined yet, so `migrate deploy` against it will fail with `P3005` until the same `migrate resolve --applied 20261011000000_init` is run there.
+Neon is still the production provider. Its connection string is kept commented out in `apps/api/.env`; the
+prod database was wiped to an **empty schema** on 2026-10-12, so there is nothing to baseline there —
+`pnpm prisma:deploy` builds it from `prisma/migrations/` on first run. Note that Prisma's CLI cannot reach
+Neon from this machine (`P1001`, while `psql` connects fine), so run prod deploys from the prod VM.
 
 ### 4. Start development
 
