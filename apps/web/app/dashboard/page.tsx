@@ -205,7 +205,7 @@ export default function DashboardPage() {
                 gap: '0.4rem',
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
               {scanning ? 'Scanning…' : 'Scan Now'}
