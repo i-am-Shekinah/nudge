@@ -1,0 +1,19 @@
+{
+  "name": "@nudge/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:web": "pnpm --filter @nudge/web build",
+    "sync": "pnpm build:web && cap sync",
+    "open:android": "cap open android",
+    "build:android": "cd android && ./gradlew assembleDebug",
+    "run:android": "pnpm sync && cap run android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/core": "^7.4.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.4"
+  }
+}

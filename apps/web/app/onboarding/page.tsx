@@ -26,14 +26,16 @@ export default function OnboardingPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
-    const token = getToken();
+    let isSubscribed = true;
+    let pollInterval: ReturnType<typeof setInterval> | undefined;
+
+    void (async () => {
+      const token = await getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
       return;
     }
-
-    let isSubscribed = true;
 
     // 1. Trigger backfill
     const triggerBackfill = async () => {
@@ -70,7 +72,7 @@ export default function OnboardingPage() {
     triggerBackfill();
 
     // 2. Poll progress every 2.5s
-    const pollInterval = setInterval(async () => {
+    pollInterval = setInterval(async () => {
       if (!isSubscribed) return;
 
       try {
@@ -119,10 +121,11 @@ export default function OnboardingPage() {
         // network polling error, retry on next tick
       }
     }, 2500);
+    })();
 
     return () => {
       isSubscribed = false;
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [apiUrl, router]);
 

@@ -16,7 +16,7 @@ export default function DismissedPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchDismissed = async () => {
-    const token = getToken();
+    const token = await getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -43,7 +43,7 @@ export default function DismissedPage() {
   }, []);
 
   const handleRestore = async (id: string) => {
-    const token = getToken();
+    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Event restored to your Pending Nudges dashboard');
     setTimeout(() => setNotice(null), 3000);
@@ -59,7 +59,7 @@ export default function DismissedPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const token = getToken();
+    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('Event permanently deleted');
     setTimeout(() => setNotice(null), 3000);

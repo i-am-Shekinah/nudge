@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ServiceWorkerRegistration } from '../components/ServiceWorkerRegistration';
+import { MobileAuthListener } from '../components/MobileAuthListener';
 
 export const metadata: Metadata = {
   title: 'Nudge — Never miss an event in your inbox',
@@ -33,6 +34,7 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <ServiceWorkerRegistration />
+        <MobileAuthListener />
       </body>
     </html>
   );

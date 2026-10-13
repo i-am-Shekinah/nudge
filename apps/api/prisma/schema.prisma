@@ -37,6 +37,7 @@ model User {
 
   scanLogs       ScanLog[]
   detectedEvents DetectedEvent[]
+  authCodes      AuthCode[]
 
   @@index([nextScanAt])   // Enables efficient "who is due for a scan right now?" queries
   @@index([nextNotifyAt]) // Same for morning notification scheduling
@@ -103,6 +104,26 @@ model DetectedEvent {
   @@unique([userId, gmailMessageId])
   @@index([userId, status])
   @@index([autoDeleteAt])
+}
+
+// ─────────────────────────────────────────────
+// AuthCode — single-use ticket that carries a fresh login to the
+// mobile app (nudge:// deep link) without ever putting a JWT in a URL.
+// Only the SHA-256 hash of the code is stored.
+// ─────────────────────────────────────────────
+
+model AuthCode {
+  id         String    @id @default(uuid())
+  codeHash   String    @unique
+  userId     String
+  isNewUser  Boolean   @default(false)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
 }
 
 // ─────────────────────────────────────────────

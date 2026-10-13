@@ -16,7 +16,7 @@ export default function HistoryPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchHistory = async () => {
-    const token = getToken();
+    const token = await getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -43,7 +43,7 @@ export default function HistoryPage() {
   }, []);
 
   const handleUndoApproval = async (id: string) => {
-    const token = getToken();
+    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Approval undone: event has been returned to your Pending Nudges');
     setTimeout(() => setNotice(null), 3500);

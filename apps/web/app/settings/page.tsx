@@ -36,42 +36,47 @@ export default function SettingsPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  useEffect(() => {
-    const token = getToken();
-
-    if (!token) {
-      router.replace('/?error=unauthorized');
-      return;
-    }
-
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch(`${apiUrl}/settings`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setTimezone(data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
-          setNotificationTime(data.notificationTime || '07:00');
-          if (data.customReminders?.length) {
-            setReminders(data.customReminders);
-          }
-          setHasPush(data.hasPushSubscription);
+  const fetchSettings = async () => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiUrl}/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTimezone(data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+        setNotificationTime(data.notificationTime || '07:00');
+        if (data.customReminders?.length) {
+          setReminders(data.customReminders);
         }
-      } catch (err) {
-        setMessage(
-          `Error loading settings: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      } finally {
-        setLoading(false);
+        setHasPush(data.hasPushSubscription);
       }
-    };
+    } catch (err) {
+      setMessage(
+        `Error loading settings: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchSettings();
+  useEffect(() => {
+    void (async () => {
+      const token = await getToken();
+
+      if (!token) {
+        router.replace('/?error=unauthorized');
+        return;
+      }
+
+      await fetchSettings();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiUrl, router]);
 
   const handleSaveTiming = async () => {
-    const token = getToken();
+    const token = await getToken();
     try {
       const res = await fetch(`${apiUrl}/settings`, {
         method: 'PATCH',
@@ -101,7 +106,7 @@ export default function SettingsPage() {
     setReminders(updated);
     setNewMinutes('');
 
-    const token = getToken();
+    const token = await getToken();
     await fetch(`${apiUrl}/settings/reminders`, {
       method: 'PATCH',
       headers: {
@@ -119,7 +124,7 @@ export default function SettingsPage() {
     const updated = reminders.filter((m) => m !== minToRemove);
     setReminders(updated);
 
-    const token = getToken();
+    const token = await getToken();
     await fetch(`${apiUrl}/settings/reminders`, {
       method: 'PATCH',
       headers: {
@@ -131,7 +136,7 @@ export default function SettingsPage() {
   };
 
   const handleResetReminders = async () => {
-    const token = getToken();
+    const token = await getToken();
     const res = await fetch(`${apiUrl}/settings/reminders/reset`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -145,7 +150,7 @@ export default function SettingsPage() {
   };
 
   const handleEnablePush = async () => {
-    const token = getToken() || undefined;
+    const token = (await getToken()) || undefined;
     const success = await registerPushSubscription(apiUrl, token);
     if (success) {
       setHasPush(true);

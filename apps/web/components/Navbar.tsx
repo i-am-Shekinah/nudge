@@ -24,7 +24,7 @@ export default function Navbar({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       await fetch(`${apiUrl}/auth/logout`, { method: 'POST' });
     } catch {}
-    clearToken();
+    await clearToken();
     router.replace('/');
   };
 

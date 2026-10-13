@@ -1,11 +1,18 @@
 'use client';
 
 import React from 'react';
+import { isNativePlatform } from '../lib/mobile';
 
 export default function Home() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
+    if (isNativePlatform()) {
+      // Google consent must happen in the system browser, not the WebView.
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.open({ url: `${apiUrl}/auth/google?client=mobile` });
+      return;
+    }
     window.location.href = `${apiUrl}/auth/google`;
   };
 

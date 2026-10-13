@@ -9,18 +9,24 @@ function CallbackContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const isNewUser = searchParams.get('isNewUser');
+    // The API now sends the token in the URL fragment (never reaches server
+    // logs); the query fallback keeps in-flight logins working during rollout.
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const token = hashParams.get('token') ?? searchParams.get('token');
+    const isNewUser =
+      hashParams.get('isNewUser') ?? searchParams.get('isNewUser');
 
     if (token) {
-      setToken(token);
+      void (async () => {
+        await setToken(token);
 
-      // Redirect to onboarding for new users, or directly to dashboard
-      if (isNewUser === 'true') {
-        router.replace('/onboarding');
-      } else {
-        router.replace('/dashboard');
-      }
+        // Redirect to onboarding for new users, or directly to dashboard
+        if (isNewUser === 'true') {
+          router.replace('/onboarding');
+        } else {
+          router.replace('/dashboard');
+        }
+      })();
     } else {
       // Missing token, redirect back to landing
       router.replace('/?error=auth_failed');
