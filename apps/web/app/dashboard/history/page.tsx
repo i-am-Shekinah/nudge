@@ -6,14 +6,13 @@ import Navbar from '../../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../../components/EventCard';
 import EmptyState from '../../../components/EmptyState';
 import { getToken } from '../../../lib/auth-token';
+import { authFetch } from '../../../lib/api';
 
 export default function HistoryPage() {
   const router = useRouter();
   const [events, setEvents] = useState<DetectedEventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchHistory = async () => {
     const token = await getToken();
@@ -24,9 +23,7 @@ export default function HistoryPage() {
     }
 
     try {
-      const res = await fetch(`${apiUrl}/events?status=HISTORY`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch('/events?status=HISTORY');
       if (res.ok) {
         const data = await res.json();
         setEvents(data.events || []);
@@ -43,16 +40,12 @@ export default function HistoryPage() {
   }, []);
 
   const handleUndoApproval = async (id: string) => {
-    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Approval undone: event has been returned to your Pending Nudges');
     setTimeout(() => setNotice(null), 3500);
 
     try {
-      await fetch(`${apiUrl}/events/${id}/undo`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/events/${id}/undo`, { method: 'POST' });
     } catch {
       fetchHistory();
     }

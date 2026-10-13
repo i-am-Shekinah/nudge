@@ -2,7 +2,7 @@
 
 import React, { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { setToken } from '../../../lib/auth-token';
+import { setToken, setTokens } from '../../../lib/auth-token';
 
 function CallbackContent() {
   const router = useRouter();
@@ -13,12 +13,17 @@ function CallbackContent() {
     // logs); the query fallback keeps in-flight logins working during rollout.
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const token = hashParams.get('token') ?? searchParams.get('token');
+    const refreshToken = hashParams.get('refresh');
     const isNewUser =
       hashParams.get('isNewUser') ?? searchParams.get('isNewUser');
 
     if (token) {
       void (async () => {
-        await setToken(token);
+        if (refreshToken) {
+          await setTokens(token, refreshToken);
+        } else {
+          await setToken(token);
+        }
 
         // Redirect to onboarding for new users, or directly to dashboard
         if (isNewUser === 'true') {

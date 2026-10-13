@@ -35,9 +35,10 @@ model User {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  scanLogs       ScanLog[]
-  detectedEvents DetectedEvent[]
-  authCodes      AuthCode[]
+  scanLogs         ScanLog[]
+  detectedEvents   DetectedEvent[]
+  authCodes        AuthCode[]
+  refreshTokens    SessionRefreshToken[]
 
   @@index([nextScanAt])   // Enables efficient "who is due for a scan right now?" queries
   @@index([nextNotifyAt]) // Same for morning notification scheduling
@@ -123,6 +124,27 @@ model AuthCode {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────
+// SessionRefreshToken — rotating credential that lets clients mint a new
+// short-lived access JWT without re-running Google OAuth. 60-day sliding
+// idle expiry; presenting an already-consumed token revokes the chain.
+// Only the SHA-256 hash is stored.
+// ─────────────────────────────────────────────
+
+model SessionRefreshToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  userId     String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([expiresAt])
 }
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import { registerPushSubscription } from '../../lib/push';
 import { getToken } from '../../lib/auth-token';
+import { API_URL, authFetch } from '../../lib/api';
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -34,15 +35,11 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
   const fetchSettings = async () => {
     const token = await getToken();
     if (!token) return;
     try {
-      const res = await fetch(`${apiUrl}/settings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch('/settings');
       if (res.ok) {
         const data = await res.json();
         setTimezone(data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
@@ -73,17 +70,13 @@ export default function SettingsPage() {
       await fetchSettings();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiUrl, router]);
+  }, [router]);
 
   const handleSaveTiming = async () => {
-    const token = await getToken();
     try {
-      const res = await fetch(`${apiUrl}/settings`, {
+      const res = await authFetch('/settings', {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timezone, notificationTime }),
       });
 
@@ -106,13 +99,9 @@ export default function SettingsPage() {
     setReminders(updated);
     setNewMinutes('');
 
-    const token = await getToken();
-    await fetch(`${apiUrl}/settings/reminders`, {
+    await authFetch('/settings/reminders', {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reminders: updated }),
     });
 
@@ -124,23 +113,15 @@ export default function SettingsPage() {
     const updated = reminders.filter((m) => m !== minToRemove);
     setReminders(updated);
 
-    const token = await getToken();
-    await fetch(`${apiUrl}/settings/reminders`, {
+    await authFetch('/settings/reminders', {
       method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reminders: updated }),
     });
   };
 
   const handleResetReminders = async () => {
-    const token = await getToken();
-    const res = await fetch(`${apiUrl}/settings/reminders/reset`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await authFetch('/settings/reminders/reset', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
       setReminders(data.customReminders || [4320, 1440, 60, 30, 5]);
@@ -151,7 +132,7 @@ export default function SettingsPage() {
 
   const handleEnablePush = async () => {
     const token = (await getToken()) || undefined;
-    const success = await registerPushSubscription(apiUrl, token);
+    const success = await registerPushSubscription(API_URL, token);
     if (success) {
       setHasPush(true);
       setMessage('✓ Web Push notifications enabled');

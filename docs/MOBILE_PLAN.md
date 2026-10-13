@@ -44,6 +44,13 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 
 ## Phase 3 — Session durability + native push + store ship (~4–5 days)
 
+> **Status (2026-10-13):** step 1 (refresh tokens) is done — see the
+> `SessionRefreshToken` model, `POST /auth/refresh`, 15-minute access JWTs,
+> and the `authFetch` refresh-on-401 helper in `apps/web/lib/api.ts`.
+> Steps 2–3 (native push, store ship) remain; native push needs a Firebase
+> project (FCM) and an Apple Developer account (APNs key).
+
+
 1. **Refresh tokens** (committed, not "decide later"):
    - Opaque, **rotating** refresh token (60-day idle expiry), stored hashed on the user row; `POST /auth/refresh` returns a new pair and invalidates the old one; reuse of an already-consumed token revokes the whole chain (stolen-token detection).
    - Rationale: a push-driven app's session should expire on *inactivity*, not on a 7-day clock. Today a user taps a nudge a week after signing in and hits a login screen mid-intent — the one moment the product exists for.

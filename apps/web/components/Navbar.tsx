@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearToken } from '../lib/auth-token';
+import { authFetch } from '../lib/api';
 
 interface NavbarProps {
   pendingCount?: number;
@@ -21,8 +22,8 @@ export default function Navbar({
 
   const handleLogout = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      await fetch(`${apiUrl}/auth/logout`, { method: 'POST' });
+      // authFetch attaches the bearer so the API can revoke the refresh chain.
+      await authFetch('/auth/logout', { method: 'POST' });
     } catch {}
     await clearToken();
     router.replace('/');

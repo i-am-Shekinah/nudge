@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { AuthCodeService } from './auth-code.service.js';
+import { RefreshTokenService } from './refresh-token.service.js';
 import { Public } from './decorators/public.decorator.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { GoogleClientGuard } from './guards/google-client.guard.js';
@@ -23,6 +24,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly authCodeService: AuthCodeService,
+    private readonly refreshTokenService: RefreshTokenService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -58,6 +60,7 @@ export class AuthController {
 
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const refreshToken = await this.refreshTokenService.issue(user.id);
 
     // Set auth cookie as fallback
     res.cookie('nudge_token', jwt, {
@@ -69,7 +72,7 @@ export class AuthController {
 
     // Fragment, not query: the token never reaches server logs or referrers.
     const targetUrl = new URL('/auth/callback', frontendUrl);
-    targetUrl.hash = `token=${encodeURIComponent(jwt)}&isNewUser=${isNewUser}`;
+    targetUrl.hash = `token=${encodeURIComponent(jwt)}&refresh=${encodeURIComponent(refreshToken)}&isNewUser=${isNewUser}`;
 
     return res.redirect(targetUrl.toString());
   }
@@ -84,6 +87,21 @@ export class AuthController {
     if (!result) {
       throw new UnauthorizedException('Invalid or expired code');
     }
+    const { userId, ...session } = result;
+    const refreshToken = await this.refreshTokenService.issue(userId);
+    return { ...session, refreshToken };
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() body: { refreshToken?: string }) {
+    const result = body.refreshToken
+      ? await this.refreshTokenService.refresh(body.refreshToken)
+      : null;
+    if (!result) {
+      throw new UnauthorizedException('Invalid, expired, or reused token');
+    }
     return result;
   }
 
@@ -94,8 +112,12 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @CurrentUser('id') userId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     res.clearCookie('nudge_token');
+    await this.refreshTokenService.revokeAllForUser(userId);
     return { success: true, message: 'Logged out successfully' };
   }
 }

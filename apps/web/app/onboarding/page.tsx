@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getToken } from '../../lib/auth-token';
+import { authFetch } from '../../lib/api';
 
 interface ScanState {
   status: 'IDLE' | 'RUNNING' | 'DONE' | 'FAILED';
@@ -41,12 +42,9 @@ export default function OnboardingPage() {
     const triggerBackfill = async () => {
       try {
         setLogs((prev) => [...prev, 'Initiating background backfill scan...']);
-        const res = await fetch(`${apiUrl}/gmail/backfill`, {
+        const res = await authFetch('/gmail/backfill', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
         });
 
         if (res.ok) {
@@ -76,11 +74,7 @@ export default function OnboardingPage() {
       if (!isSubscribed) return;
 
       try {
-        const res = await fetch(`${apiUrl}/scans/latest`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const res = await authFetch('/scans/latest');
 
         if (res.ok) {
           const data = await res.json();

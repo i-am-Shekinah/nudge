@@ -6,6 +6,7 @@ import Navbar from '../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import { getToken } from '../../lib/auth-token';
+import { authFetch } from '../../lib/api';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,8 +15,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchDashboardData = async () => {
     const token = await getToken();
@@ -27,18 +26,14 @@ export default function DashboardPage() {
 
     try {
       // Fetch user profile
-      const userRes = await fetch(`${apiUrl}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const userRes = await authFetch('/auth/me');
       if (userRes.ok) {
         const userData = await userRes.json();
         setUser(userData);
       }
 
       // Fetch pending events
-      const eventsRes = await fetch(`${apiUrl}/events?status=PENDING`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const eventsRes = await authFetch('/events?status=PENDING');
       if (eventsRes.ok) {
         const data = await eventsRes.json();
         setEvents(data.events || []);
@@ -57,48 +52,36 @@ export default function DashboardPage() {
   }, []);
 
   const handleApprove = async (id: string) => {
-    const token = await getToken();
     // Optimistic UI removal
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Event approved and queued for Google Calendar sync');
     setTimeout(() => setNotice(null), 3500);
 
     try {
-      await fetch(`${apiUrl}/events/${id}/approve`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/events/${id}/approve`, { method: 'POST' });
     } catch (err) {
       fetchDashboardData(); // Revert on failure
     }
   };
 
   const handleIgnore = async (id: string) => {
-    const token = await getToken();
     // Optimistic UI removal
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('Event dismissed (visible in Dismissed view)');
     setTimeout(() => setNotice(null), 3500);
 
     try {
-      await fetch(`${apiUrl}/events/${id}/ignore`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/events/${id}/ignore`, { method: 'POST' });
     } catch (err) {
       fetchDashboardData();
     }
   };
 
   const handleScanNow = async () => {
-    const token = await getToken();
     setScanning(true);
     setNotice('Scanning your inbox for new events…');
     try {
-      const res = await fetch(`${apiUrl}/scans/run-now`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch('/scans/run-now', { method: 'POST' });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -114,9 +97,7 @@ export default function DashboardPage() {
       const deadline = Date.now() + 5 * 60 * 1000;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 3000));
-        const latest = await fetch(`${apiUrl}/scans/latest`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const latest = await authFetch('/scans/latest');
         if (!latest.ok) continue;
         const { scan } = await latest.json();
         if (scan && (scan.status === 'DONE' || scan.status === 'FAILED')) {

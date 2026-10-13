@@ -18,7 +18,7 @@ export function MobileAuthListener() {
     let cancelled = false;
 
     void (async () => {
-      const [{ App }, { setToken }] = await Promise.all([
+      const [{ App }, { setTokens }] = await Promise.all([
         import('@capacitor/app'),
         import('../lib/auth-token'),
       ]);
@@ -44,8 +44,8 @@ export function MobileAuthListener() {
             router.replace('/?error=auth_failed');
             return;
           }
-          const { token, isNewUser } = await res.json();
-          await setToken(token);
+          const { token, refreshToken, isNewUser } = await res.json();
+          await setTokens(token, refreshToken);
           router.replace(isNewUser ? '/onboarding' : '/dashboard');
         } catch {
           router.replace('/?error=auth_failed');

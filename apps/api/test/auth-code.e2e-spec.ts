@@ -38,6 +38,9 @@ describe('Auth code exchange (e2e)', () => {
         findFirst: () => Promise.resolve(null),
         upsert: () => Promise.resolve(fakeUser),
       },
+      sessionRefreshToken: {
+        create: () => Promise.resolve({ id: 'fake-refresh' }),
+      },
       authCode: {
         create: ({ data }: any) => {
           store.set(data.codeHash, { ...data, consumedAt: null });

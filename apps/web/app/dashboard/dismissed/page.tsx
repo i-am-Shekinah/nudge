@@ -6,14 +6,13 @@ import Navbar from '../../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../../components/EventCard';
 import EmptyState from '../../../components/EmptyState';
 import { getToken } from '../../../lib/auth-token';
+import { authFetch } from '../../../lib/api';
 
 export default function DismissedPage() {
   const router = useRouter();
   const [events, setEvents] = useState<DetectedEventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchDismissed = async () => {
     const token = await getToken();
@@ -24,9 +23,7 @@ export default function DismissedPage() {
     }
 
     try {
-      const res = await fetch(`${apiUrl}/events?status=IGNORED`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch('/events?status=IGNORED');
       if (res.ok) {
         const data = await res.json();
         setEvents(data.events || []);
@@ -43,32 +40,24 @@ export default function DismissedPage() {
   }, []);
 
   const handleRestore = async (id: string) => {
-    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Event restored to your Pending Nudges dashboard');
     setTimeout(() => setNotice(null), 3000);
 
     try {
-      await fetch(`${apiUrl}/events/${id}/undo`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/events/${id}/undo`, { method: 'POST' });
     } catch {
       fetchDismissed();
     }
   };
 
   const handleDelete = async (id: string) => {
-    const token = await getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('Event permanently deleted');
     setTimeout(() => setNotice(null), 3000);
 
     try {
-      await fetch(`${apiUrl}/events/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/events/${id}`, { method: 'DELETE' });
     } catch {
       fetchDismissed();
     }

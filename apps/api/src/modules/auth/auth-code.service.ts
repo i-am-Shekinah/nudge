@@ -35,7 +35,7 @@ export class AuthCodeService {
 
   async exchange(
     code: string,
-  ): Promise<{ token: string; isNewUser: boolean } | null> {
+  ): Promise<{ token: string; isNewUser: boolean; userId: string } | null> {
     const codeHash = hashCode(code);
     const record = await this.prisma.authCode.findUnique({
       where: { codeHash },
@@ -58,6 +58,6 @@ export class AuthCodeService {
       sub: record.user.id,
       email: record.user.email,
     });
-    return { token, isNewUser: record.isNewUser };
+    return { token, isNewUser: record.isNewUser, userId: record.user.id };
   }
 }
