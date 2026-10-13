@@ -151,29 +151,16 @@ export default function DashboardPage() {
         avatarUrl={user?.avatarUrl}
       />
 
-      <main
-        style={{
-          flex: 1,
-          maxWidth: '1000px',
-          width: '100%',
-          margin: '0 auto',
-          padding: '2.5rem 1.5rem 5rem',
-        }}
-      >
+      <main className="page-main">
         {/* Banner notification */}
         {notice && (
           <div
+            className="notice-banner"
             style={{
-              marginBottom: '1.5rem',
-              padding: '0.85rem 1.25rem',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              color: '#c7d2fe',
-              fontSize: '0.9rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: '0.75rem',
             }}
           >
             <span>{notice}</span>
@@ -187,25 +174,9 @@ export default function DashboardPage() {
         )}
 
         {/* Page Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '2rem',
-            flexWrap: 'wrap',
-            gap: '1rem',
-          }}
-        >
+        <div className="page-header">
           <div>
-            <h1
-              style={{
-                fontSize: '2rem',
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                marginBottom: '0.35rem',
-              }}
-            >
+            <h1 className="page-title">
               Pending Nudges
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
@@ -213,7 +184,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <div className="header-actions">
             <button
               onClick={handleScanNow}
               disabled={scanning}

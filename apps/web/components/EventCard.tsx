@@ -57,9 +57,8 @@ export default function EventCard({
 
   return (
     <div
-      className="glass-card"
+      className="glass-card card-pad"
       style={{
-        padding: '1.5rem',
         display: 'flex',
         flexDirection: 'column',
         gap: '1rem',
@@ -184,7 +183,7 @@ export default function EventCard({
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+      <div className="event-card-actions">
         {viewMode === 'dashboard' && (
           <>
             <button

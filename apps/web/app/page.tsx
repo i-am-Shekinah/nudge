@@ -12,18 +12,7 @@ export default function Home() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top Navbar */}
-      <header
-        style={{
-          borderBottom: '1px solid var(--border-subtle)',
-          padding: '1.25rem 2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          maxWidth: '1200px',
-          width: '100%',
-          margin: '0 auto',
-        }}
-      >
+      <header className="landing-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div
             style={{
@@ -67,19 +56,7 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '4rem 1.5rem 6rem',
-          maxWidth: '1000px',
-          margin: '0 auto',
-          textAlign: 'center',
-        }}
-      >
+      <main className="landing-hero">
         {/* Badge */}
         <div
           style={{
@@ -112,7 +89,7 @@ export default function Home() {
             WebkitTextFillColor: 'transparent',
           }}
         >
-          Never miss an event <br />
+          Never miss an event <br className="hero-br" />
           <span
             style={{
               background: 'linear-gradient(135deg, #818cf8 0%, #c084fc 100%)',
@@ -183,20 +160,11 @@ export default function Home() {
             </svg>
             Continue with Google
           </button>
-          <div
-            style={{
-              fontSize: '0.8rem',
-              color: 'var(--text-muted)',
-              marginTop: '0.85rem',
-              display: 'flex',
-              gap: '1.25rem',
-              justifyContent: 'center',
-            }}
-          >
+          <div className="trust-row">
             <span>🔒 AES-256 encrypted</span>
-            <span>•</span>
+            <span className="trust-dot">•</span>
             <span>👁️ Read-only Gmail analysis</span>
-            <span>•</span>
+            <span className="trust-dot">•</span>
             <span>⚡ Human approval required</span>
           </div>
         </div>
@@ -216,6 +184,8 @@ export default function Home() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
               marginBottom: '1rem',
             }}
           >

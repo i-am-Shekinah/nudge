@@ -80,45 +80,16 @@ export default function DismissedPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      <main
-        style={{
-          flex: 1,
-          maxWidth: '1000px',
-          width: '100%',
-          margin: '0 auto',
-          padding: '2.5rem 1.5rem 5rem',
-        }}
-      >
-        {notice && (
-          <div
-            style={{
-              marginBottom: '1.5rem',
-              padding: '0.85rem 1.25rem',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              color: '#c7d2fe',
-              fontSize: '0.9rem',
-            }}
-          >
-            {notice}
-          </div>
-        )}
+      <main className="page-main">
+        {notice && <div className="notice-banner">{notice}</div>}
 
-        <div style={{ marginBottom: '2rem' }}>
-          <h1
-            style={{
-              fontSize: '2rem',
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-              marginBottom: '0.35rem',
-            }}
-          >
-            Dismissed Events
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Events you chose not to add to your calendar. You can restore them back to pending at any time.
-          </p>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Dismissed Events</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
+              Events you chose not to add to your calendar. You can restore them back to pending at any time.
+            </p>
+          </div>
         </div>
 
         {loading ? (

@@ -46,90 +46,79 @@ export default function Navbar({
         zIndex: 50,
       }}
     >
-      <div
-        style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          padding: '0.85rem 1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <Link
-            href="/dashboard"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}
+      <div className="navbar-inner">
+        <Link
+          href="/dashboard"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}
+        >
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1rem',
+            }}
           >
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1rem',
-              }}
-            >
-              ⚡
-            </div>
-            <span
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Nudge
-            </span>
-          </Link>
+            ⚡
+          </div>
+          <span
+            style={{
+              fontSize: '1.2rem',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Nudge
+          </span>
+        </Link>
 
-          <nav style={{ display: 'flex', gap: '0.5rem' }}>
-            {navLinks.map((link) => {
-              const isActive = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  style={{
-                    padding: '0.5rem 0.9rem',
-                    borderRadius: '8px',
-                    fontSize: '0.875rem',
-                    fontWeight: isActive ? 600 : 500,
-                    color: isActive ? '#ffffff' : 'var(--text-secondary)',
-                    backgroundColor: isActive
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <span>{link.label}</span>
-                  {link.count !== undefined && link.count > 0 && (
-                    <span
-                      style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        backgroundColor: '#6366f1',
-                        color: '#ffffff',
-                        padding: '0.1rem 0.45rem',
-                        borderRadius: '9999px',
-                      }}
-                    >
-                      {link.count}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        <nav className="navbar-nav">
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                style={{
+                  padding: '0.5rem 0.9rem',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? '#ffffff' : 'var(--text-secondary)',
+                  backgroundColor: isActive
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>{link.label}</span>
+                {link.count !== undefined && link.count > 0 && (
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      backgroundColor: '#6366f1',
+                      color: '#ffffff',
+                      padding: '0.1rem 0.45rem',
+                      borderRadius: '9999px',
+                    }}
+                  >
+                    {link.count}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="navbar-account">
           {avatarUrl ? (
             <img
               src={avatarUrl}

@@ -174,46 +174,15 @@ export default function SettingsPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      <main
-        style={{
-          flex: 1,
-          maxWidth: '850px',
-          width: '100%',
-          margin: '0 auto',
-          padding: '2.5rem 1.5rem 5rem',
-        }}
-      >
+      <main className="page-main" style={{ maxWidth: '850px' }}>
         <div style={{ marginBottom: '2rem' }}>
-          <h1
-            style={{
-              fontSize: '2rem',
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-              marginBottom: '0.35rem',
-            }}
-          >
-            Settings & Preferences
-          </h1>
+          <h1 className="page-title">Settings & Preferences</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
             Configure your timezone, notification briefing time, and Google Calendar reminder presets.
           </p>
         </div>
 
-        {message && (
-          <div
-            style={{
-              marginBottom: '1.5rem',
-              padding: '0.85rem 1.25rem',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              color: '#c7d2fe',
-              fontSize: '0.9rem',
-            }}
-          >
-            {message}
-          </div>
-        )}
+        {message && <div className="notice-banner">{message}</div>}
 
         {loading ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -222,7 +191,7 @@ export default function SettingsPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {/* Card 1: Timezone & Notification Time */}
-            <div className="glass-card" style={{ padding: '1.75rem' }}>
+            <div className="glass-card card-pad">
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                 Schedule & Timezone
               </h2>
@@ -230,7 +199,7 @@ export default function SettingsPage() {
                 Determines when your nightly scan runs (midnight local) and when your morning email brief arrives.
               </p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
+              <div className="settings-grid">
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#cbd5e1' }}>
                     Your Timezone
@@ -293,8 +262,8 @@ export default function SettingsPage() {
             </div>
 
             {/* Card 2: Google Calendar Reminders */}
-            <div className="glass-card" style={{ padding: '1.75rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+            <div className="glass-card card-pad">
+              <div className="card-row-wrap" style={{ marginBottom: '1rem' }}>
                 <div>
                   <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                     Google Calendar Reminders
@@ -351,7 +320,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Add custom reminder form */}
-              <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '350px' }}>
+              <div className="reminder-form">
                 <input
                   type="number"
                   placeholder="Minutes before (e.g. 15)"
@@ -384,7 +353,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Card 3: Browser Push Notifications */}
-            <div className="glass-card" style={{ padding: '1.75rem' }}>
+            <div className="glass-card card-pad">
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                 Web Push Notifications
               </h2>
@@ -392,7 +361,7 @@ export default function SettingsPage() {
                 Receive instant browser alerts when important event deadlines or flight bookings are detected.
               </p>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div className="card-row-wrap" style={{ alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <span
                     style={{

@@ -19,12 +19,8 @@ export default function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className="glass-card"
+      className="glass-card empty-state"
       style={{
-        padding: '3.5rem 2rem',
-        textAlign: 'center',
-        maxWidth: '520px',
-        margin: '2rem auto',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
