@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { GmailService } from '../gmail/gmail.service.js';
 import { filterEmailHeuristically } from '../gmail/email-filter.util.js';
-import { AiService } from '../ai/ai.service.js';
+import { AiService, isQuotaExhaustedError } from '../ai/ai.service.js';
 import { EventsService } from '../events/events.service.js';
 import { getNextMidnight, getNextScheduledTime } from '../../common/timezone.util.js';
 import { ScanStatus } from '@prisma/client';
@@ -95,10 +95,15 @@ export class ScannerService {
       });
 
       // 2. Heuristic filtering (drop newsletters & marketing blasts)
-      const candidates = emails.filter((email) => {
-        const res = filterEmailHeuristically(email);
-        return res.shouldScan;
-      });
+      const candidates = emails
+        .filter((email) => {
+          const res = filterEmailHeuristically(email);
+          return res.shouldScan;
+        })
+        // Oldest first: if a daily AI quota aborts the scan mid-way, the
+        // cursor can honestly advance to "everything older than here was
+        // classified" and tomorrow's scan resumes instead of repeating.
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
 
       this.logger.log(
         `Fetched ${emails.length} emails; ${candidates.length} candidates passed heuristic filtering.`,
@@ -107,51 +112,81 @@ export class ScannerService {
       let eventsCount = 0;
       let processed = 0;
       let classificationErrors = 0;
+      let lastClassifiedAt: Date | null = null;
       const PROGRESS_EVERY = 10;
 
-      // 3. AI classification via Gemini
-      for (const candidate of candidates) {
+      // 3. AI classification via Gemini, in quota-efficient batches
+      const batchSize = this.aiService.batchSize;
+      for (let i = 0; i < candidates.length; i += batchSize) {
+        const batch = candidates.slice(i, i + batchSize);
         try {
-          // Transient body excerpt so deadlines buried past the snippet are
-          // visible to the classifier; never stored, and failure degrades to
-          // snippet-only rather than dropping the email.
-          let emailWithContext = candidate;
-          try {
-            const body = await this.gmailService.fetchEmailContent(
-              userId,
-              candidate.id,
-            );
-            emailWithContext = { ...candidate, body };
-          } catch (err: any) {
-            this.logger.warn(
-              `Body fetch failed for email ${candidate.id}, classifying on snippet only: ${err.message}`,
-            );
-          }
+          // Transient body excerpts so deadlines buried past the snippet are
+          // visible to the classifier; never stored, and a failed fetch
+          // degrades that email to snippet-only rather than dropping it.
+          const emailsWithBodies = await Promise.all(
+            batch.map(async (candidate) => {
+              try {
+                const body = await this.gmailService.fetchEmailContent(
+                  userId,
+                  candidate.id,
+                );
+                return { ...candidate, body };
+              } catch (err: any) {
+                this.logger.warn(
+                  `Body fetch failed for email ${candidate.id}, classifying on snippet only: ${err.message}`,
+                );
+                return candidate;
+              }
+            }),
+          );
 
-          const classified = await this.aiService.classifyEmail(
-            emailWithContext,
+          const results = await this.aiService.classifyEmailBatch(
+            emailsWithBodies,
             userTimezone,
           );
 
-          if (classified) {
-            await this.eventsService.createDetectedEvent(
-              userId,
-              candidate,
-              classified,
-            );
-            eventsCount++;
+          for (const email of emailsWithBodies) {
+            const classified = results.get(email.id);
+            if (classified) {
+              await this.eventsService.createDetectedEvent(
+                userId,
+                email,
+                classified,
+              );
+              eventsCount++;
+            }
           }
+          lastClassifiedAt = batch[batch.length - 1].date;
         } catch (err: any) {
-          // One poison email (rate limit, parser crash) must not fail the
-          // whole scan: that would stall the cursor and re-crash nightly.
-          classificationErrors++;
+          // Quota exhaustion will not lift mid-scan: abort, advance the
+          // cursor to the last fully-classified batch (never past this one),
+          // and fail the scan so the rest resumes tomorrow instead of
+          // re-spending the daily quota on already-processed mail.
+          if (isQuotaExhaustedError(err)) {
+            if (
+              lastClassifiedAt &&
+              lastClassifiedAt.getTime() > windowStart.getTime()
+            ) {
+              await this.prisma.user.update({
+                where: { id: userId },
+                data: { lastScannedAt: lastClassifiedAt },
+              });
+            }
+            throw err;
+          }
+          // A broken batch is skipped whole; the systematic-failure check
+          // below still turns an all-failing scan into an honest FAILED.
+          classificationErrors += batch.length;
           this.logger.warn(
-            `Classification failed for email ${candidate.id}, skipping: ${err.message}`,
+            `Classification failed for a batch of ${batch.length} emails, skipping: ${err.message}`,
           );
         }
 
-        processed++;
-        if (processed % PROGRESS_EVERY === 0) {
+        processed += batch.length;
+        const crossedMilestone =
+          Math.floor(processed / PROGRESS_EVERY) >
+          Math.floor((processed - batch.length) / PROGRESS_EVERY);
+        if (crossedMilestone || processed === candidates.length) {
           await this.prisma.scanLog.update({
             where: { id: scanLogId },
             data: {

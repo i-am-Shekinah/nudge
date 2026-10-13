@@ -3,11 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './ai.prompt.js';
 import {
-  AiOutputSchema,
+  AiBatchOutputSchema,
   AiClassifiedEvent,
   isValidDetectedEvent,
 } from './ai.schema.js';
 import { EmailDto } from '../gmail/gmail.types.js';
+
+/**
+ * Google signals hard quota exhaustion (free-tier daily cap) with
+ * RESOURCE_EXHAUSTED and retry delays measured in hours.
+ */
+export function isQuotaExhaustedError(err: any): boolean {
+  const text = String(err?.message ?? err?.status ?? '');
+  return /RESOURCE_EXHAUSTED|exceeded your current quota/i.test(text);
+}
 
 @Injectable()
 export class AiService {
@@ -18,6 +27,11 @@ export class AiService {
   private readonly confidenceThreshold: number;
   // 3 attempts total: immediate, +2s, +8s — rides out a 503 load-shed burst
   private readonly retryDelaysMs = [2_000, 8_000];
+  /**
+   * Emails per Gemini call. 20 balances quota/cost against the model's max
+   * output tokens and batch attention quality; capped at 30 deliberately.
+   */
+  readonly batchSize: number;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY') || null;
@@ -31,6 +45,10 @@ export class AiService {
       Number.isFinite(threshold) && threshold > 0 && threshold <= 1
         ? threshold
         : 0.75;
+    const batchSize = Number(this.configService.get<string>('AI_BATCH_SIZE'));
+    this.batchSize = Number.isFinite(batchSize) && batchSize >= 1
+      ? Math.min(batchSize, 30)
+      : 20;
 
     if (this.apiKey) {
       this.aiClient = new GoogleGenAI({ apiKey: this.apiKey });
@@ -42,56 +60,90 @@ export class AiService {
   }
 
   /**
-   * Classifies an email using Gemini with structured JSON output.
-   * Returns a valid AiClassifiedEvent, or null if the email is not actionable.
+   * Classifies a batch of emails in ONE Gemini call (quota/cost efficiency).
+   * Returns a map emailId -> event (null = classified, not actionable).
    * API/parse errors are NOT swallowed: the scanner needs to tell "no event"
    * apart from "AI unreachable" so a systematic outage fails the scan and
    * holds the cursor instead of silently burning the window.
    */
-  async classifyEmail(
-    email: EmailDto,
+  async classifyEmailBatch(
+    emails: EmailDto[],
     userTimezone: string = 'UTC',
-  ): Promise<AiClassifiedEvent | null> {
+  ): Promise<Map<string, AiClassifiedEvent | null>> {
+    if (emails.length === 0) return new Map();
+
     if (!this.aiClient) {
-      return this.mockClassification(email, userTimezone);
+      return new Map(
+        emails.map((e) => [e.id, this.mockClassification(e, userTimezone)]),
+      );
     }
 
-    const bodySection = email.body
-      ? `
-Email Body Excerpt (transient, for locating explicit dates/deadlines — never stored):
-${email.body}
-`
-      : '';
-
-    const emailContext = `
-Email Subject: ${email.subject}
-From: ${email.from}
-Date Sent: ${email.date.toISOString()}
-Recipient User Timezone: ${userTimezone}
-Email Snippet/Preview:
-${email.snippet}${bodySection}
-`;
+    const emailContext =
+      `Classify each of the following ${emails.length} email(s) independently. ` +
+      `Recipient user timezone: ${userTimezone}.\n\n` +
+      emails.map((e) => this.renderEmailBlock(e, userTimezone)).join('\n\n');
 
     const response = await this.generateWithRetry(emailContext);
 
     const responseText = response.text || '{}';
     const parsedJson = JSON.parse(responseText);
 
-    // Validate output shape with Zod
-    const validated = AiOutputSchema.parse(parsedJson);
+    // Validate output shape with Zod (one entry per email)
+    const { results } = AiBatchOutputSchema.parse(parsedJson);
+    const byId = new Map(results.map((r) => [r.email_id, r]));
 
-    if (!isValidDetectedEvent(validated, new Date(), this.confidenceThreshold)) {
-      this.logger.debug(
-        `Email "${email.subject}" classified as non-actionable or below confidence (${validated.confidence})`,
+    const out = new Map<string, AiClassifiedEvent | null>();
+    for (const email of emails) {
+      const item = byId.get(email.id);
+      if (!item) {
+        // The model dropped this email; treat as unclassified, not as an event.
+        this.logger.warn(
+          `Batch response missing result for email ${email.id}; treating as non-event`,
+        );
+        out.set(email.id, null);
+        continue;
+      }
+      const { email_id: _omit, ...event } = item;
+      if (!isValidDetectedEvent(event, new Date(), this.confidenceThreshold)) {
+        this.logger.debug(
+          `Email "${email.subject}" classified as non-actionable or below confidence (${event.confidence})`,
+        );
+        out.set(email.id, null);
+        continue;
+      }
+      this.logger.log(
+        `Event detected: "${event.title}" (Confidence: ${event.confidence}, Type: ${event.event_type})`,
       );
-      return null;
+      out.set(email.id, event);
     }
+    return out;
+  }
 
-    this.logger.log(
-      `Event detected: "${validated.title}" (Confidence: ${validated.confidence}, Type: ${validated.event_type})`,
-    );
+  /**
+   * Convenience single-email wrapper around classifyEmailBatch.
+   */
+  async classifyEmail(
+    email: EmailDto,
+    userTimezone: string = 'UTC',
+  ): Promise<AiClassifiedEvent | null> {
+    const results = await this.classifyEmailBatch([email], userTimezone);
+    return results.get(email.id) ?? null;
+  }
 
-    return validated;
+  private renderEmailBlock(email: EmailDto, userTimezone: string): string {
+    const bodySection = email.body
+      ? `
+Email Body Excerpt (transient, for locating explicit dates/deadlines — never stored):
+${email.body}`
+      : '';
+
+    return `=== EMAIL ${email.id} ===
+Email Subject: ${email.subject}
+From: ${email.from}
+Date Sent: ${email.date.toISOString()}
+Email Snippet/Preview:
+${email.snippet}${bodySection}
+`;
   }
 
   /**
@@ -136,6 +188,10 @@ ${email.snippet}${bodySection}
   }
 
   private isTransientError(err: any): boolean {
+    // Daily quota exhaustion (free tier: 20 req/day) resets in hours, not
+    // seconds — retrying burns time and buys nothing. The scanner aborts the
+    // scan on it instead.
+    if (isQuotaExhaustedError(err)) return false;
     const code = err?.code ?? err?.status;
     if (typeof code === 'number') {
       return code === 429 || code >= 500;

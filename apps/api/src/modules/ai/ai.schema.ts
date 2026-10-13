@@ -18,6 +18,16 @@ export const AiOutputSchema = z.object({
 
 export type AiClassifiedEvent = z.infer<typeof AiOutputSchema>;
 
+export const AiBatchItemSchema = AiOutputSchema.extend({
+  email_id: z.string(),
+});
+
+export const AiBatchOutputSchema = z.object({
+  results: z.array(AiBatchItemSchema),
+});
+
+export type AiBatchItem = z.infer<typeof AiBatchItemSchema>;
+
 /**
  * Validation rules to check if AI classification should become a DetectedEvent.
  */

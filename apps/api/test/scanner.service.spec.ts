@@ -25,6 +25,9 @@ describe('ScannerService', () => {
     gmailUrl: 'https://mail.google.com/mail/u/0/#inbox/msg-1',
   };
 
+  const batchResult = (id: string, event: any = null) =>
+    new Map([[id, event]]);
+
   beforeEach(() => {
     prismaMock = {
       user: {
@@ -41,7 +44,12 @@ describe('ScannerService', () => {
       fetchEmails: vi.fn(),
       fetchEmailContent: vi.fn().mockResolvedValue('body excerpt for classification'),
     };
-    aiMock = { classifyEmail: vi.fn() };
+    // batchSize 1 keeps per-email semantics for these specs; batching
+    // itself is covered by ai.service.spec and the batch specs below.
+    aiMock = {
+      classifyEmailBatch: vi.fn(),
+      batchSize: 1,
+    };
     eventsMock = { createDetectedEvent: vi.fn().mockResolvedValue({}) };
 
     service = new ScannerService(
@@ -54,7 +62,9 @@ describe('ScannerService', () => {
 
   it('arms the nightly scan (nextScanAt) and advances the cursor when the pipeline completes', async () => {
     gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
-    aiMock.classifyEmail.mockResolvedValue({ title: 'Technical assessment' });
+    aiMock.classifyEmailBatch.mockResolvedValue(
+      batchResult('msg-1', { title: 'Technical assessment' }),
+    );
     prismaMock.user.findUnique.mockResolvedValue({ notificationTime: '08:00' });
 
     const windowEnd = new Date();
@@ -81,9 +91,9 @@ describe('ScannerService', () => {
   it('skips a poison email instead of failing the whole scan', async () => {
     const poison = { ...candidateEmail, id: 'msg-poison' };
     gmailMock.fetchEmails.mockResolvedValue([poison, candidateEmail]);
-    aiMock.classifyEmail
+    aiMock.classifyEmailBatch
       .mockRejectedValueOnce(new Error('Gemini 429 rate limited'))
-      .mockResolvedValueOnce({ title: 'Technical assessment' });
+      .mockResolvedValueOnce(batchResult('msg-1', { title: 'Technical assessment' }));
 
     await service.runScanPipeline(
       userId,
@@ -93,7 +103,7 @@ describe('ScannerService', () => {
       'UTC',
     );
 
-    expect(aiMock.classifyEmail).toHaveBeenCalledTimes(2);
+    expect(aiMock.classifyEmailBatch).toHaveBeenCalledTimes(2);
     expect(eventsMock.createDetectedEvent).toHaveBeenCalledTimes(1);
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
@@ -114,7 +124,7 @@ describe('ScannerService', () => {
       'UTC',
     );
 
-    expect(aiMock.classifyEmail).not.toHaveBeenCalled();
+    expect(aiMock.classifyEmailBatch).not.toHaveBeenCalled();
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
     expect(finalUpdate.data.eventsDetected).toBe(0);
@@ -143,7 +153,7 @@ describe('ScannerService', () => {
       candidateEmail,
       { ...candidateEmail, id: 'msg-2' },
     ]);
-    aiMock.classifyEmail.mockRejectedValue(
+    aiMock.classifyEmailBatch.mockRejectedValue(
       new Error('model gemini-2.0-flash is no longer available'),
     );
 
@@ -161,10 +171,15 @@ describe('ScannerService', () => {
     expect(finalUpdate.data.errorMessage).toMatch(/all 2 candidates/i);
   });
 
-  it('classifies candidates with a transient body excerpt so buried deadlines are visible', async () => {
-    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
-    gmailMock.fetchEmailContent.mockResolvedValue('Deadline: Monday, 12 October 2026');
-    aiMock.classifyEmail.mockResolvedValue(null);
+  it('aborts the scan on the first quota exhaustion instead of hammering the rest', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([
+      candidateEmail,
+      { ...candidateEmail, id: 'msg-2' },
+      { ...candidateEmail, id: 'msg-3' },
+    ]);
+    aiMock.classifyEmailBatch.mockRejectedValue(
+      new Error('429 RESOURCE_EXHAUSTED: exceeded your current quota'),
+    );
 
     await service.runScanPipeline(
       userId,
@@ -174,14 +189,21 @@ describe('ScannerService', () => {
       'UTC',
     );
 
-    const passed = aiMock.classifyEmail.mock.calls[0][0];
-    expect(passed.body).toBe('Deadline: Monday, 12 October 2026');
+    // one attempt, then straight out — not one per candidate
+    expect(aiMock.classifyEmailBatch).toHaveBeenCalledTimes(1);
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
+    expect(finalUpdate.data.errorMessage).toMatch(/RESOURCE_EXHAUSTED/);
   });
 
-  it('degrades to snippet-only classification when the body fetch fails', async () => {
-    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
-    gmailMock.fetchEmailContent.mockRejectedValue(new Error('429 rate limited'));
-    aiMock.classifyEmail.mockResolvedValue(null);
+  it('advances the cursor to the last classified email when quota aborts mid-scan', async () => {
+    const older = { ...candidateEmail, id: 'msg-old', date: new Date(Date.now() - 12 * 3600 * 1000) };
+    const newer = { ...candidateEmail, id: 'msg-new', date: new Date(Date.now() - 6 * 3600 * 1000) };
+    gmailMock.fetchEmails.mockResolvedValue([newer, older]); // newest-first, as Gmail lists them
+    aiMock.classifyEmailBatch
+      .mockResolvedValueOnce(batchResult('msg-old', null)) // older email classifies fine
+      .mockRejectedValueOnce(new Error('RESOURCE_EXHAUSTED')); // newer one hits the wall
 
     await service.runScanPipeline(
       userId,
@@ -191,15 +213,41 @@ describe('ScannerService', () => {
       'UTC',
     );
 
-    expect(aiMock.classifyEmail).toHaveBeenCalledTimes(1);
-    expect(aiMock.classifyEmail.mock.calls[0][0].body).toBeUndefined();
+    // oldest processed first; cursor advances exactly to it — tomorrow resumes, never repeats
+    expect(aiMock.classifyEmailBatch.mock.calls[0][0][0].id).toBe('msg-old');
+    const userUpdate = prismaMock.user.update.mock.calls.find(
+      ([args]: any[]) => args.data?.lastScannedAt,
+    )?.[0];
+    expect(userUpdate.data.lastScannedAt).toEqual(older.date);
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
-    expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
+    expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
+  });
+
+  it('sends whole batches to the AI in one call when batchSize allows', async () => {
+    aiMock.batchSize = 20;
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      ...candidateEmail,
+      id: `msg-${i}`,
+    }));
+    gmailMock.fetchEmails.mockResolvedValue(many);
+    aiMock.classifyEmailBatch.mockResolvedValue(new Map(many.map((e) => [e.id, null])));
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    // 15 emails, batch size 20 -> a single Gemini call
+    expect(aiMock.classifyEmailBatch).toHaveBeenCalledTimes(1);
+    expect(aiMock.classifyEmailBatch.mock.calls[0][0]).toHaveLength(15);
   });
 
   it('chains an immediate follow-up scan when a chunk leaves the cursor behind', async () => {
     gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
-    aiMock.classifyEmail.mockResolvedValue(null);
+    aiMock.classifyEmailBatch.mockResolvedValue(batchResult('msg-1', null));
 
     const staleWindowEnd = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h behind
     await service.runScanPipeline(
@@ -226,7 +274,7 @@ describe('ScannerService', () => {
       id: `msg-${i}`,
     }));
     gmailMock.fetchEmails.mockResolvedValue(many);
-    aiMock.classifyEmail.mockResolvedValue(null);
+    aiMock.classifyEmailBatch.mockResolvedValue(new Map(many.map((e) => [e.id, null])));
 
     await service.runScanPipeline(
       userId,
@@ -240,6 +288,42 @@ describe('ScannerService', () => {
       .map(([args]: any[]) => args.data.emailsScanned)
       .filter((n: number) => n === 10 || n === 20);
     expect(progressWrites).toEqual([10, 20]);
+  });
+
+  it('classifies candidates with a transient body excerpt so buried deadlines are visible', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
+    gmailMock.fetchEmailContent.mockResolvedValue('Deadline: Monday, 12 October 2026');
+    aiMock.classifyEmailBatch.mockResolvedValue(batchResult('msg-1', null));
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    const passed = aiMock.classifyEmailBatch.mock.calls[0][0][0];
+    expect(passed.body).toBe('Deadline: Monday, 12 October 2026');
+  });
+
+  it('degrades to snippet-only classification when the body fetch fails', async () => {
+    gmailMock.fetchEmails.mockResolvedValue([candidateEmail]);
+    gmailMock.fetchEmailContent.mockRejectedValue(new Error('429 rate limited'));
+    aiMock.classifyEmailBatch.mockResolvedValue(batchResult('msg-1', null));
+
+    await service.runScanPipeline(
+      userId,
+      'scan-1',
+      new Date(Date.now() - 24 * 3600 * 1000),
+      new Date(),
+      'UTC',
+    );
+
+    expect(aiMock.classifyEmailBatch).toHaveBeenCalledTimes(1);
+    expect(aiMock.classifyEmailBatch.mock.calls[0][0][0].body).toBeUndefined();
+    const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
+    expect(finalUpdate.data.status).toBe(ScanStatus.DONE);
   });
 
   it('triggerBackfill skips users whose backfill already ran', async () => {

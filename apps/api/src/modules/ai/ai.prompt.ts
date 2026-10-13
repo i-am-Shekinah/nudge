@@ -22,6 +22,9 @@ Do NOT flag as time-sensitive:
 - Social media notifications, discussion comments, or newsletters
 
 Return structured JSON conforming to the schema.
+
+Batch mode:
+You will receive multiple emails, each starting with a line "=== EMAIL <email_id> ===". Analyze every email independently and return a single JSON object of the form {"results": [ ... ]} containing EXACTLY one result per email_id, each carrying its "email_id" plus all schema fields. Never merge two emails, never omit an email_id, and never invent one.
 Always format timestamps in ISO 8601 (e.g. "2026-10-15T14:30:00Z").
 Assign importance: "HIGH" for job interviews/assessments/flights, "MEDIUM" for meetings/webinars, "LOW" for general events.
 Assign confidence: float from 0.0 to 1.0 representing your certainty that this is an actionable, genuine event.
