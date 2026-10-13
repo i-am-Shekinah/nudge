@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '../../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../../components/EventCard';
 import EmptyState from '../../../components/EmptyState';
+import { getToken } from '../../../lib/auth-token';
 
 export default function DismissedPage() {
   const router = useRouter();
@@ -15,10 +16,7 @@ export default function DismissedPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchDismissed = async () => {
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nudge_token')
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -45,7 +43,7 @@ export default function DismissedPage() {
   }, []);
 
   const handleRestore = async (id: string) => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Event restored to your Pending Nudges dashboard');
     setTimeout(() => setNotice(null), 3000);
@@ -61,7 +59,7 @@ export default function DismissedPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('Event permanently deleted');
     setTimeout(() => setNotice(null), 3000);

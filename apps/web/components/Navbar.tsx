@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { clearToken } from '../lib/auth-token';
 
 interface NavbarProps {
   pendingCount?: number;
@@ -23,8 +24,7 @@ export default function Navbar({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       await fetch(`${apiUrl}/auth/logout`, { method: 'POST' });
     } catch {}
-    localStorage.removeItem('nudge_token');
-    document.cookie = 'nudge_token=; path=/; max-age=0';
+    clearToken();
     router.replace('/');
   };
 

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getToken } from '../../lib/auth-token';
 
 interface ScanState {
   status: 'IDLE' | 'RUNNING' | 'DONE' | 'FAILED';
@@ -25,10 +26,7 @@ export default function OnboardingPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nudge_token')
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');

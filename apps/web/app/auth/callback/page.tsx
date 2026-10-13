@@ -2,6 +2,7 @@
 
 import React, { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { setToken } from '../../../lib/auth-token';
 
 function CallbackContent() {
   const router = useRouter();
@@ -12,11 +13,7 @@ function CallbackContent() {
     const isNewUser = searchParams.get('isNewUser');
 
     if (token) {
-      // Store JWT in localStorage for client-side API requests
-      localStorage.setItem('nudge_token', token);
-
-      // Set client cookie for SSR requests
-      document.cookie = `nudge_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+      setToken(token);
 
       // Redirect to onboarding for new users, or directly to dashboard
       if (isNewUser === 'true') {

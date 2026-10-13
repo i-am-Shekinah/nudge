@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import { registerPushSubscription } from '../../lib/push';
+import { getToken } from '../../lib/auth-token';
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -36,10 +37,7 @@ export default function SettingsPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nudge_token')
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -73,7 +71,7 @@ export default function SettingsPage() {
   }, [apiUrl, router]);
 
   const handleSaveTiming = async () => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     try {
       const res = await fetch(`${apiUrl}/settings`, {
         method: 'PATCH',
@@ -103,7 +101,7 @@ export default function SettingsPage() {
     setReminders(updated);
     setNewMinutes('');
 
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     await fetch(`${apiUrl}/settings/reminders`, {
       method: 'PATCH',
       headers: {
@@ -121,7 +119,7 @@ export default function SettingsPage() {
     const updated = reminders.filter((m) => m !== minToRemove);
     setReminders(updated);
 
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     await fetch(`${apiUrl}/settings/reminders`, {
       method: 'PATCH',
       headers: {
@@ -133,7 +131,7 @@ export default function SettingsPage() {
   };
 
   const handleResetReminders = async () => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     const res = await fetch(`${apiUrl}/settings/reminders/reset`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -147,7 +145,7 @@ export default function SettingsPage() {
   };
 
   const handleEnablePush = async () => {
-    const token = localStorage.getItem('nudge_token') || undefined;
+    const token = getToken() || undefined;
     const success = await registerPushSubscription(apiUrl, token);
     if (success) {
       setHasPush(true);

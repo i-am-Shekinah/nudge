@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
+import { getToken } from '../../lib/auth-token';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -17,10 +18,7 @@ export default function DashboardPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchDashboardData = async () => {
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nudge_token')
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -59,7 +57,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleApprove = async (id: string) => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     // Optimistic UI removal
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Event approved and queued for Google Calendar sync');
@@ -76,7 +74,7 @@ export default function DashboardPage() {
   };
 
   const handleIgnore = async (id: string) => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     // Optimistic UI removal
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('Event dismissed (visible in Dismissed view)');
@@ -93,7 +91,7 @@ export default function DashboardPage() {
   };
 
   const handleScanNow = async () => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     setScanning(true);
     setNotice('Scanning your inbox for new events…');
     try {

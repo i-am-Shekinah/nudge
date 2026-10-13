@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '../../../components/Navbar';
 import EventCard, { DetectedEventItem } from '../../../components/EventCard';
 import EmptyState from '../../../components/EmptyState';
+import { getToken } from '../../../lib/auth-token';
 
 export default function HistoryPage() {
   const router = useRouter();
@@ -15,10 +16,7 @@ export default function HistoryPage() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const fetchHistory = async () => {
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('nudge_token')
-        : null;
+    const token = getToken();
 
     if (!token) {
       router.replace('/?error=unauthorized');
@@ -45,7 +43,7 @@ export default function HistoryPage() {
   }, []);
 
   const handleUndoApproval = async (id: string) => {
-    const token = localStorage.getItem('nudge_token');
+    const token = getToken();
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setNotice('✓ Approval undone: event has been returned to your Pending Nudges');
     setTimeout(() => setNotice(null), 3500);

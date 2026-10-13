@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
   "buildCommand": "pnpm --filter @nudge/web exec next build",
-  "installCommand": "pnpm install",
-  "cleanUrls": true
+  "installCommand": "pnpm install"
 }
