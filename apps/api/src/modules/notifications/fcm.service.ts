@@ -70,9 +70,16 @@ export class FcmService {
           body: JSON.stringify({
             message: {
               token: registrationToken,
-              notification: { title: payload.title, body: payload.body },
-              data: { url: payload.url },
-              android: { priority: 'HIGH', notification: { clickAction: 'OPEN_ACTIVITY_1' } },
+              // Data-only on purpose: a notification payload is rendered by
+              // the transport (and Tecno/HiOS replaces the small icon
+              // there). NudgeMessagingService in the shell renders it
+              // itself with the branded white-bolt icon.
+              data: {
+                title: payload.title,
+                body: payload.body,
+                url: payload.url,
+              },
+              android: { priority: 'HIGH' },
             },
           }),
         },

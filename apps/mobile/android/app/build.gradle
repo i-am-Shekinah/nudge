@@ -36,6 +36,11 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // NudgeMessagingService extends the push plugin's service; the plugin
+    // keeps firebase-messaging on its own (implementation) classpath, so
+    // the app needs it directly to compile against it.
+    implementation "com.google.firebase:firebase-messaging:24.1.0"
+    implementation "androidx.core:core:1.13.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

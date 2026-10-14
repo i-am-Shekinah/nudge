@@ -67,10 +67,7 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 > can still be thawing when `appUrlOpen` lands.
 >
 > **Open gaps:**
-> 1. *Notification polish:* the tray shows Android's generic placeholder
->    icon — add a white-on-transparent `stat_icon` (and brand color) so
->    pushes render properly; store-quality requirement.
-> 2. *Apple Developer Program — not started (deferred by choice).* No
+> 1. *Apple Developer Program — not started (deferred by choice).* No
 >    account enrollment, no App ID with Push capability, no `.p8` APNs
 >    key; iOS platform cannot be added to the shell without a Mac anyway.
 >    APNs transport in the dispatcher is a mock until this lands.

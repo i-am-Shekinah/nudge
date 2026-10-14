@@ -26,6 +26,12 @@ export function MobileAuthListener() {
     const handleUrl = async (url: string) => {
       // NOTE: URL() on older WebKit/Chromium parses custom schemes as
       // host='' + pathname='//auth/callback', so match the raw string.
+      if (url.startsWith('nudge://push')) {
+        const target =
+          new URLSearchParams(url.split('?')[1] ?? '').get('url') || '/dashboard';
+        router.replace(target);
+        return;
+      }
       if (!url.startsWith('nudge://auth/callback')) {
         return;
       }

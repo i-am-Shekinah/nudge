@@ -64,7 +64,10 @@ describe('FcmService', () => {
     );
     const message = JSON.parse(String(calls[1].init.body));
     expect(message.message.token).toBe('device-token');
-    expect(message.message.notification.title).toBe('Hi');
+    // Data-only: the shell renders notifications itself (OEM transports
+    // replace custom small icons on notification-payload messages).
+    expect(message.message.data.title).toBe('Hi');
+    expect(message.message.notification).toBeUndefined();
     expect((calls[1].init.headers as Record<string, string>).Authorization).toBe(
       'Bearer ya29.fake',
     );
