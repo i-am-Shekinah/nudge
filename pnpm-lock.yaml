@@ -302,14 +302,26 @@ importers:
   apps/mobile:
     dependencies:
       '@capacitor/android':
-        specifier: ^7.4.4
+        specifier: ^7
         version: 7.6.9(@capacitor/core@7.6.9)
+      '@capacitor/app':
+        specifier: ^7
+        version: 7.1.2(@capacitor/core@7.6.9)
+      '@capacitor/browser':
+        specifier: ^7
+        version: 7.0.5(@capacitor/core@7.6.9)
       '@capacitor/core':
-        specifier: ^7.4.4
+        specifier: ^7
         version: 7.6.9
+      '@capacitor/preferences':
+        specifier: ^7
+        version: 7.0.4(@capacitor/core@7.6.9)
+      '@capacitor/push-notifications':
+        specifier: ^7
+        version: 7.0.7(@capacitor/core@7.6.9)
     devDependencies:
       '@capacitor/cli':
-        specifier: ^7.4.4
+        specifier: ^7
         version: 7.6.9(supports-color@7.2.0)
 
   apps/web:

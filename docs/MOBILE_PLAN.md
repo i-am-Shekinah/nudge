@@ -44,7 +44,7 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 
 ## Phase 3 — Session durability + native push + store ship (~4–5 days)
 
-> **Status (2026-10-13):** step 1 (refresh tokens) is done — see the
+> **Status (2026-10-14):** step 1 (refresh tokens) is done — see the
 > `SessionRefreshToken` model, `POST /auth/refresh`, 15-minute access JWTs,
 > and the `authFetch` refresh-on-401 helper in `apps/web/lib/api.ts`.
 > Step 2 is built and tested (FCM v1 transport, `native-subscription`
@@ -54,11 +54,22 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 > `apps/api/secrets/fcm-service-account.json`, env vars `FCM_PROJECT_ID` +
 > `FCM_SERVICE_ACCOUNT_JSON`).
 >
+> **On-device verification (Pixel 7 emulator + TECNO KM5, 2026-10-14):**
+> the full chain passed from a clean install on both — Google sign-in →
+> `nudge://` deep link → code exchange (consumed in ~2 s) → dashboard
+> with live data → FCM registration token stored on the user row → real
+> push delivered to the notification shade → tap routes back to the
+> dashboard. Three fixes came out of this: the API CORS allowlist must
+> include the shell origins (`WEB_ORIGIN` now carries `https://localhost`
+> etc.), the deep-link parser must not use `new URL()` for custom schemes
+> on older WebViews (string prefix + `URLSearchParams` instead), and the
+> exchange retries with a 4 s timeout because the WebView network stack
+> can still be thawing when `appUrlOpen` lands.
+>
 > **Open gaps:**
-> 1. *Firebase IAM (one click, user action):* the `nudge-push` service
->    account needs the **Firebase Cloud Messaging Admin** role — OAuth
->    succeeds today but `messages:send` returns 403 until granted
->    (Console → IAM & Admin → add principal → role).
+> 1. *Notification polish:* the tray shows Android's generic placeholder
+>    icon — add a white-on-transparent `stat_icon` (and brand color) so
+>    pushes render properly; store-quality requirement.
 > 2. *Apple Developer Program — not started (deferred by choice).* No
 >    account enrollment, no App ID with Push capability, no `.p8` APNs
 >    key; iOS platform cannot be added to the shell without a Mac anyway.

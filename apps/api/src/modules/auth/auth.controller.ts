@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
@@ -21,6 +22,7 @@ import { GoogleClientGuard } from './guards/google-client.guard.js';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
   constructor(
     private readonly authService: AuthService,
     private readonly authCodeService: AuthCodeService,
@@ -43,7 +45,10 @@ export class AuthController {
     const { user, jwt, isNewUser } =
       await this.authService.validateGoogleUser(googleUser);
 
-    const client = (req as any).authInfo?.state === 'mobile' ? 'mobile' : 'web';
+    // Google echoes our `state` back as a query param on this callback.
+    // (Nest's AuthGuard discards passport's info object, so req.authInfo
+    // is NOT available here — read the query, exact-match only.)
+    const client = req.query?.state === 'mobile' ? 'mobile' : 'web';
 
     if (client === 'mobile') {
       // Never put a session token in a deep link: hand over a 60-second,
@@ -81,6 +86,9 @@ export class AuthController {
   @Post('exchange')
   @HttpCode(HttpStatus.OK)
   async exchangeCode(@Body() body: { code?: string }) {
+    this.logger.log(
+      `exchange request code=${(body.code ?? '').slice(0, 8)}… len=${body.code?.length ?? 0}`,
+    );
     const result = body.code
       ? await this.authCodeService.exchange(body.code)
       : null;
