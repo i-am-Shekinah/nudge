@@ -140,4 +140,34 @@ export class AuthService {
       tokenExpiresAt: user.tokenExpiresAt,
     };
   }
+
+  /**
+   * Irreversible account deletion: revoke the Google grant first (so the
+   * user's Google "Third-party access" page reflects it), then drop the
+   * user row — events, sessions, auth codes and push tokens cascade.
+   */
+  async deleteAccount(userId: string) {
+    let googleRefreshToken = '';
+    let googleAccessToken = '';
+    try {
+      const tokens = await this.getUserTokens(userId);
+      googleRefreshToken = tokens.refreshToken;
+      googleAccessToken = tokens.accessToken;
+    } catch {
+      // Unknown user or undecryptable row: nothing to revoke at Google.
+    }
+    const revokeToken = googleRefreshToken || googleAccessToken;
+    if (revokeToken) {
+      try {
+        await fetch(
+          `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(revokeToken)}`,
+          { method: 'POST' },
+        );
+      } catch {
+        // Best effort: a network failure here must not block deletion.
+      }
+    }
+    await this.prisma.user.delete({ where: { id: userId } });
+    this.logger.log(`Account deleted for user ${userId}`);
+  }
 }

@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Body,
@@ -127,5 +128,16 @@ export class AuthController {
     res.clearCookie('nudge_token');
     await this.refreshTokenService.revokeAllForUser(userId);
     return { success: true, message: 'Logged out successfully' };
+  }
+
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  async deleteAccount(
+    @CurrentUser('id') userId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.clearCookie('nudge_token');
+    await this.authService.deleteAccount(userId);
+    return { success: true, message: 'Account and all associated data deleted' };
   }
 }

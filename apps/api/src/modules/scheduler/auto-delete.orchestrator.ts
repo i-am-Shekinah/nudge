@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { EventStatus } from '@prisma/client';
 
 @Injectable()
 export class AutoDeleteOrchestrator {
@@ -11,39 +10,24 @@ export class AutoDeleteOrchestrator {
 
   /**
    * Daily cleanup sweep running at 02:00 UTC.
-   * Sweeps events whose 7-day post-event retention window (autoDeleteAt) has elapsed.
+   * Deletes every event past its 7-day post-event retention window
+   * (autoDeleteAt), regardless of status — this is what the Settings
+   * page and Privacy Policy disclose.
    */
   @Cron('0 2 * * *')
   async sweepExpiredEvents() {
     try {
-      const now = new Date();
-
-      const expiredEvents = await this.prisma.detectedEvent.findMany({
-        where: {
-          autoDeleteAt: {
-            lte: now,
-          },
-          status: {
-            in: [EventStatus.COMPLETED, EventStatus.EXPIRED, EventStatus.IGNORED],
-          },
-        },
-      });
-
-      if (expiredEvents.length === 0) {
-        return;
-      }
-
-      this.logger.log(`Found ${expiredEvents.length} expired events to auto-delete`);
-
       const result = await this.prisma.detectedEvent.deleteMany({
         where: {
-          id: {
-            in: expiredEvents.map((e) => e.id),
+          autoDeleteAt: {
+            lte: new Date(),
           },
         },
       });
 
-      this.logger.log(`Auto-deleted ${result.count} expired events.`);
+      if (result.count > 0) {
+        this.logger.log(`Auto-deleted ${result.count} events past retention.`);
+      }
     } catch (err: any) {
       this.logger.error(`Error in auto-delete sweep: ${err.message}`);
     }
