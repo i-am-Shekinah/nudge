@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import { registerPushSubscription } from '../../lib/push';
-import { getToken } from '../../lib/auth-token';
+import { getToken, clearToken } from '../../lib/auth-token';
 import { API_URL, authFetch } from '../../lib/api';
 
 const COMMON_TIMEZONES = [
@@ -34,6 +34,34 @@ export default function SettingsPage() {
   const [hasPush, setHasPush] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await authFetch('/auth/account', { method: 'DELETE' });
+      if (res.ok) {
+        await clearToken();
+        router.replace('/');
+        return;
+      }
+      setMessage('Could not delete your account. Please try again.');
+    } catch {
+      setMessage('Could not reach the server. Please try again.');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const legalLinkStyle: React.CSSProperties = {
+    color: 'var(--text-primary)',
+    fontWeight: 600,
+    fontSize: '0.9rem',
+    textDecoration: 'none',
+    cursor: 'pointer',
+  };
 
   const fetchSettings = async () => {
     const token = await getToken();
@@ -393,6 +421,102 @@ export default function SettingsPage() {
               <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
                 Nudge strictly analyzes email headers and short snippets to detect calendar events—we never store your raw email bodies. To keep your database uncluttered and protect your privacy, actionable events are retained for exactly 7 days after the event date, after which they are automatically purged.
               </p>
+            </div>
+
+            {/* Card 5: Legal */}
+            <div className="glass-card card-pad">
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                Legal
+              </h2>
+              <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                <a
+                  href="/privacy/"
+                  style={legalLinkStyle}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-primary)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                >
+                  Privacy Policy →
+                </a>
+                <a
+                  href="/terms/"
+                  style={legalLinkStyle}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-primary)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                >
+                  Terms of Service →
+                </a>
+              </div>
+            </div>
+
+            {/* Card 6: Danger Zone */}
+            <div
+              style={{
+                padding: '1.5rem',
+                borderRadius: '12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+              }}
+            >
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f87171', marginBottom: '0.4rem' }}>
+                Delete account
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '1rem' }}>
+                Permanently removes your Nudge account: profile, detected events,
+                sessions and notification subscriptions. Nudge&apos;s access to your
+                Google account is revoked. Calendar events you approved stay on
+                your calendar. This cannot be undone.
+              </p>
+              {!confirmDelete ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  style={{
+                    padding: '0.6rem 1.1rem',
+                    backgroundColor: 'transparent',
+                    color: '#f87171',
+                    border: '1px solid #f87171',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Delete my account
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                    style={{
+                      padding: '0.6rem 1.1rem',
+                      backgroundColor: '#dc2626',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: deleting ? 'wait' : 'pointer',
+                      opacity: deleting ? 0.7 : 1,
+                    }}
+                  >
+                    {deleting ? 'Deleting…' : 'Yes, delete everything'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    style={{
+                      padding: '0.6rem 1.1rem',
+                      backgroundColor: 'transparent',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid rgba(148, 163, 184, 0.4)',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

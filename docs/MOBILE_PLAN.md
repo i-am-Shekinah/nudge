@@ -92,9 +92,21 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 
 ## Phase 4 — Privacy & legal compliance (store-mandated docs) (~2–3 days)
 
+> **Status (2026-10-14):** items 1–3 are drafted/implemented. `/privacy` and
+> `/terms` are static pages in `apps/web/app/` whose every claim is anchored
+> to file:line evidence (reviewer notes at the top of each page); they still
+> carry bracketed placeholders (operator legal name, hosting region) and need
+> an attorney pass before publication. Account deletion is live:
+> `DELETE /auth/account` (Google-grant revocation + cascade, covered by
+> `test/account-deletion.e2e-spec.ts`) behind a Settings Danger Zone
+> two-step confirm, with Legal links on the same page. The auto-delete sweep
+> now purges *all* event statuses past `autoDeleteAt`, matching the
+> disclosed 7-day retention. Items 4–6 (Gmail limited-use disclosure, store
+> forms, support URL) remain.
+
 Public store apps are expected to ship these; Apple actively rejects for missing ones.
 
-1. **Privacy Policy** (hosted at a stable URL, e.g. `nudge.app/privacy`): what is collected (name, email, avatar, Gmail message *metadata*, calendar event data, push tokens, analytics), what is never stored (no raw email bodies — already the design), retention (events purged 7 days after the event date), third parties (Google OAuth, FCM/APNs, Resend, Firebase Analytics), and contact info.
+1. **Privacy Policy** (hosted at a stable URL, e.g. `nudge.app/privacy`): what is collected (name, email, avatar, Gmail message *metadata*, calendar event data, push tokens — no analytics SDKs exist in the codebase), what is never stored (no raw email bodies — already the design), retention (events purged 7 days after the event date), third parties (Google OAuth, Gmail/Calendar/Gemini APIs, FCM/APNs, Resend), and contact info.
 2. **Terms of Service** (`nudge.app/terms`): acceptable use, the read-only Gmail guarantee, liability limits, termination.
 3. **Account deletion (Apple guideline 5.1.1(v)):** mandatory in-app + web account deletion that cascades user rows, tokens and stored subscriptions. Needs an API endpoint (`DELETE /auth/account`) + a Settings UI entry — currently missing.
 4. **Gmail API disclosure:** Google requires a limited-use disclosure plus links to Google's Privacy Policy/Terms wherever Gmail scopes are requested (onboarding + Settings), and CASA-tier review if the app scales.
