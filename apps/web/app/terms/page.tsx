@@ -48,7 +48,7 @@ export default function TermsOfService() {
     <div style={{ minHeight: '100vh' }}>
       <header
         style={{
-          padding: '1rem 1.5rem',
+          padding: 'calc(1rem + env(safe-area-inset-top)) 1.5rem 1rem',
           borderBottom: '1px solid var(--border-subtle)',
           display: 'flex',
           alignItems: 'center',
