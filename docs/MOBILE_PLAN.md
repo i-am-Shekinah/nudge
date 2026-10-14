@@ -71,6 +71,20 @@ What is in place: all pages are `'use client'` and fetch the API with a Bearer t
 >    account enrollment, no App ID with Push capability, no `.p8` APNs
 >    key; iOS platform cannot be added to the shell without a Mac anyway.
 >    APNs transport in the dispatcher is a mock until this lands.
+> 2. *Analytics decision unresolved (blocks the privacy story).* The plan
+>    above says "enable GA for Firebase + Crashlytics", but no analytics
+>    SDK exists in the codebase and `/privacy` (accurately, as of
+>    2026-10-14) promises "no analytics tools". Decide before store
+>    submission: enable GA → amend the policy + Data Safety form, or drop
+>    GA → policy stays as-is.
+> 3. *Production hosting — the quiet blocker.* A stable domain is needed
+>    for the API (ends the cloudflared/redirect-URI churn), for the static
+>    web export (so `/privacy` + `/terms` have the public URLs both stores
+>    ask for), and for Postgres. It also closes the last bracket
+>    (`[hosting provider / region]`) in the Privacy Policy.
+> 4. *Release build + signing.* Everything tested so far is debug APKs;
+>    Play internal testing needs a signed AAB and a release keystore kept
+>    safe (Play App Signing can backstop key loss).
 
 
 1. **Refresh tokens** (committed, not "decide later"):

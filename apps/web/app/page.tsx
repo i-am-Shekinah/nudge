@@ -21,20 +21,19 @@ export default function Home() {
       {/* Top Navbar */}
       <header className="landing-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div
+          <img
+            src="/icon-192.png"
+            alt=""
+            width={36}
+            height={36}
             style={{
               width: '36px',
               height: '36px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: 'block',
               boxShadow: '0 0 20px rgba(99, 102, 241, 0.4)',
             }}
-          >
-            <span style={{ fontSize: '1.25rem' }}>⚡</span>
-          </div>
+          />
           <span style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
             Nudge
           </span>

@@ -52,20 +52,18 @@ export default function Navbar({
           href="/dashboard"
           style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}
         >
-          <div
+          <img
+            src="/icon-192.png"
+            alt=""
+            width={32}
+            height={32}
             style={{
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1rem',
+              display: 'block',
             }}
-          >
-            ⚡
-          </div>
+          />
           <span
             style={{
               fontSize: '1.2rem',
