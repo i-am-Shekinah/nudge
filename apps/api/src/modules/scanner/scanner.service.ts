@@ -265,6 +265,14 @@ export class ScannerService {
           completedAt: new Date(),
         },
       });
+      // nextScanAt is otherwise armed only on success, so a user whose very
+      // first scan fails (AI outage during onboarding) would never be picked
+      // up by the nightly orchestrator. Arm tomorrow's midnight regardless;
+      // updateMany so a since-deleted user doesn't throw here.
+      await this.prisma.user.updateMany({
+        where: { id: userId },
+        data: { nextScanAt: getNextMidnight(userTimezone, new Date()) },
+      });
     }
   }
 

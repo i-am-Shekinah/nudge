@@ -34,6 +34,7 @@ describe('ScannerService', () => {
         findUnique: vi.fn().mockResolvedValue({ notificationTime: '07:00' }),
         findMany: vi.fn(),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       scanLog: {
         create: vi.fn().mockResolvedValue({ id: 'scan-1' }),
@@ -145,6 +146,15 @@ describe('ScannerService', () => {
     expect(prismaMock.user.update).not.toHaveBeenCalled();
     const finalUpdate = prismaMock.scanLog.update.mock.calls.at(-1)?.[0];
     expect(finalUpdate.data.status).toBe(ScanStatus.FAILED);
+    // A failed first scan must still arm the nightly sweeper, or the user is
+    // silently never retried (nextScanAt is otherwise set only on success).
+    const armed = prismaMock.user.updateMany.mock.calls.find(
+      ([args]: any[]) => args.where.id === userId,
+    )?.[0];
+    expect(armed.data.nextScanAt).toBeInstanceOf(Date);
+    expect(armed.data.nextScanAt.getTime()).toBeGreaterThan(Date.now());
+    // ...but arming the schedule is not advancing the cursor
+    expect(armed.data.lastScannedAt).toBeUndefined();
   });
 
   it('fails the scan and holds the cursor when classification errors on every candidate', async () => {

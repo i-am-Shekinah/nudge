@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Type } from '@google/genai';
 
 export const AI_CONFIDENCE_THRESHOLD = 0.7;
 
@@ -27,6 +28,43 @@ export const AiBatchOutputSchema = z.object({
 });
 
 export type AiBatchItem = z.infer<typeof AiBatchItemSchema>;
+
+/**
+ * Gemini structured-output schema: forces every model — including the
+ * weaker fallback tier — to emit fields the Zod contract accepts. Prompt
+ * alone was not enough: gemini-flash-lite-latest dropped is_time_sensitive
+ * from all 7 results and the whole batch failed validation.
+ */
+export const AI_BATCH_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    results: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          email_id: { type: Type.STRING },
+          is_time_sensitive: { type: Type.BOOLEAN },
+          event_type: { type: Type.STRING, nullable: true },
+          title: { type: Type.STRING, nullable: true },
+          summary: { type: Type.STRING, nullable: true },
+          start_at: { type: Type.STRING, nullable: true },
+          end_at: { type: Type.STRING, nullable: true },
+          deadline: { type: Type.STRING, nullable: true },
+          timezone: { type: Type.STRING, nullable: true },
+          importance: {
+            type: Type.STRING,
+            enum: ['LOW', 'MEDIUM', 'HIGH'],
+          },
+          confidence: { type: Type.NUMBER },
+          reasoning: { type: Type.STRING, nullable: true },
+        },
+        required: ['email_id', 'is_time_sensitive', 'confidence', 'importance'],
+      },
+    },
+  },
+  required: ['results'],
+};
 
 /**
  * Validation rules to check if AI classification should become a DetectedEvent.

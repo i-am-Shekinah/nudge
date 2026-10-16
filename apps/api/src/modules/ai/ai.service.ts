@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
 import { CLASSIFICATION_SYSTEM_PROMPT } from './ai.prompt.js';
 import {
+  AI_BATCH_RESPONSE_SCHEMA,
   AiBatchOutputSchema,
   AiClassifiedEvent,
   isValidDetectedEvent,
@@ -24,9 +25,14 @@ export class AiService {
   private readonly aiClient: GoogleGenAI | null = null;
   private readonly apiKey: string | null;
   private readonly model: string;
+  // The flash tiers share one capacity pool — during today's outage both
+  // gemini-3.8-flash and gemini-flash-latest shed while lite answered. Fallback
+  // must be a different pool to be worth having.
+  private readonly fallbackModel: string;
   private readonly confidenceThreshold: number;
-  // 3 attempts total: immediate, +2s, +8s — rides out a 503 load-shed burst
-  private readonly retryDelaysMs = [2_000, 8_000];
+  // 4 attempts total: immediate, +2s, +15s, +60s — a 503 "high demand"
+  // load-shed burst lasts minutes, not seconds; ~77s of backoff rides it out
+  private readonly retryDelaysMs = [2_000, 15_000, 60_000];
   /**
    * Emails per Gemini call. 20 balances quota/cost against the model's max
    * output tokens and batch attention quality; capped at 30 deliberately.
@@ -38,6 +44,9 @@ export class AiService {
     // Model names get retired by Google; keep it swappable without a code change
     this.model =
       this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.8-flash';
+    this.fallbackModel =
+      this.configService.get<string>('GEMINI_FALLBACK_MODEL') ||
+      'gemini-flash-lite-latest';
     const threshold = Number(
       this.configService.get<string>('AI_CONFIDENCE_THRESHOLD'),
     );
@@ -150,13 +159,35 @@ ${email.snippet}${bodySection}
    * Google's newer models intermittently shed load (503 "high demand") while
    * everyone migrates off retired ones; retry those in-place so one spike
    * doesn't fail the whole scan. Auth/validation errors throw immediately.
+   * If the primary model is still shedding after its whole backoff cycle,
+   * run one more cycle against the fallback alias — a model-level storm then
+   * stops being the scan's failure mode. Quota/auth errors are account-level
+   * and isTransientError rejects them, so the fallback never doubles those.
    */
   private async generateWithRetry(emailContext: string) {
+    try {
+      return await this.generateWithBackoff(emailContext, this.model);
+    } catch (err: any) {
+      if (
+        this.fallbackModel &&
+        this.fallbackModel !== this.model &&
+        this.isTransientError(err)
+      ) {
+        this.logger.warn(
+          `Gemini ${this.model} still shedding after retries; falling back to ${this.fallbackModel}`,
+        );
+        return await this.generateWithBackoff(emailContext, this.fallbackModel);
+      }
+      throw err;
+    }
+  }
+
+  private async generateWithBackoff(emailContext: string, model: string) {
     let attempt = 0;
     for (;;) {
       try {
         return await this.aiClient!.models.generateContent({
-          model: this.model,
+          model,
           contents: [
             {
               role: 'user',
@@ -166,6 +197,7 @@ ${email.snippet}${bodySection}
           config: {
             systemInstruction: CLASSIFICATION_SYSTEM_PROMPT,
             responseMimeType: 'application/json',
+            responseSchema: AI_BATCH_RESPONSE_SCHEMA,
             temperature: 0.1,
           },
         });
@@ -179,7 +211,7 @@ ${email.snippet}${bodySection}
         const delay = this.retryDelaysMs[attempt];
         attempt++;
         this.logger.warn(
-          `Gemini ${this.model} transient failure (attempt ${attempt}/${this.retryDelaysMs.length + 1}): ` +
+          `Gemini ${model} transient failure (attempt ${attempt}/${this.retryDelaysMs.length + 1}): ` +
             `${String(err?.message).slice(0, 160)}. Retrying in ${delay}ms.`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
