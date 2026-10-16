@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { getNextScheduledTime } from '../../common/timezone.util.js';
-import { EventStatus } from '@prisma/client';
+import { EventStatus, ScanStatus } from '@prisma/client';
 
 @Injectable()
 export class MorningNotifyOrchestrator {
@@ -38,6 +38,27 @@ export class MorningNotifyOrchestrator {
       this.logger.log(`Found ${dueUsers.length} user(s) due for morning notifications`);
 
       for (const user of dueUsers) {
+        // A catch-up scan dispatched after downtime can start in the same tick
+        // that this digest comes due; sending now would read 0 pending events
+        // and burn the slot. Defer while such a scan is in flight — or is due
+        // but not yet picked up, since tick order is not guaranteed — capped by
+        // a grace window so a hung scan cannot silence the digest forever.
+        const activeScan = await this.prisma.scanLog.findFirst({
+          where: { userId: user.id, status: ScanStatus.RUNNING },
+          orderBy: { startedAt: 'desc' },
+        });
+        const GRACE_MS = 30 * 60 * 1000;
+        const scanInFlight =
+          (user.gmailConnected && user.nextScanAt && user.nextScanAt <= now) ||
+          (activeScan !== null &&
+            now.getTime() - activeScan.startedAt.getTime() < GRACE_MS);
+        if (scanInFlight) {
+          this.logger.log(
+            `Deferring morning digest for ${user.email}: scan in flight or due`,
+          );
+          continue;
+        }
+
         // Advance nextNotifyAt immediately to prevent re-picking
         const nextTime = getNextScheduledTime(
           user.notificationTime,
